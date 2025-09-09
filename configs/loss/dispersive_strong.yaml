@@ -2,5 +2,6 @@
 
 # Strong Dispersive Loss Configuration
 _target_: dflow.training.DispersiveLoss
+name: dispersive_strong
 lambda_disp: 0.5
 tau: 0.5

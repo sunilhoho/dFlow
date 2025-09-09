@@ -155,6 +155,7 @@ class SiT(nn.Module):
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
+        **kwargs
     ):
         super().__init__()
         self.learn_sigma = learn_sigma

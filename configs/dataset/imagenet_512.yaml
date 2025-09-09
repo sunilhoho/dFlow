@@ -2,7 +2,8 @@
 
 # ImageNet 512x512 Dataset Configuration
 _target_: torchvision.datasets.ImageNet
-root: /path/to/imagenet
+name: imagenet512
+root: /storage/dataset/imagenet
 split: train
 transform:
   _target_: torchvision.transforms.Compose

@@ -2,7 +2,8 @@
 
 # CIFAR-100 Dataset Configuration
 _target_: torchvision.datasets.CIFAR100
-root: /path/to/cifar100
+name: cifar100
+root: /storage/dataset/cifar100
 train: true
 download: true
 transform:

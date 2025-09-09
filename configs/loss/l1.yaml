@@ -2,4 +2,5 @@
 
 # L1 Loss Configuration
 _target_: torch.nn.L1Loss
+name: l1
 reduction: mean

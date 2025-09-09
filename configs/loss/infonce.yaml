@@ -2,5 +2,6 @@
 
 # InfoNCE Loss Configuration
 _target_: dflow.losses.InfoNCE
+name: infonce
 temperature: 0.07
 normalize: true

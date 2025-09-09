@@ -2,4 +2,5 @@
 
 # MSE Loss Configuration
 _target_: torch.nn.MSELoss
+name: mse
 reduction: mean

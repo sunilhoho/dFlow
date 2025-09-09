@@ -83,7 +83,7 @@ def train_model(model: nn.Module,
     
     # Training loop
     model.train()
-    for epoch in range(config.training.max_epochs):
+    for epoch in range(config.max_epochs):
         epoch_loss = 0.0
         num_batches = 0
         
@@ -120,15 +120,15 @@ def train_model(model: nn.Module,
             # Total loss
             total_loss = main_loss
             if dispersive_loss is not None:
-                total_loss += config.training.get('dispersive_weight', 0.25) * disp_loss
+                total_loss += config.get('dispersive_weight', 0.25) * disp_loss
             
             # Backward pass
             optimizer.zero_grad()
             total_loss.backward()
             
             # Gradient clipping
-            if config.training.gradient_clip_val > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), config.training.gradient_clip_val)
+            if config.gradient_clip_val > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), config.gradient_clip_val)
             
             optimizer.step()
             
@@ -136,7 +136,7 @@ def train_model(model: nn.Module,
             num_batches += 1
             
             # Logging
-            if batch_idx % config.training.log_every_n_steps == 0:
+            if batch_idx % config.log_every_n_steps == 0:
                 logging.info(
                     f"Epoch {epoch}, Batch {batch_idx}, "
                     f"Loss: {total_loss.item():.4f}, "
@@ -172,7 +172,7 @@ def train_model(model: nn.Module,
             })
         
         # Save checkpoint
-        if epoch % config.training.save_every_n_epochs == 0:
+        if epoch % config.save_every_n_epochs == 0:
             checkpoint_path = Path(config.checkpoint_dir) / f"checkpoint_epoch_{epoch}.pt"
             checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save({
@@ -253,16 +253,14 @@ def main(cfg: DictConfig):
     if not cfg.get("output_dir"):
         cfg.output_dir = str(out_dir)
     logging.info("output path: %s", cfg.output_dir)
-
     # Setup wandb
-    model_name = str(cfg.model.get("_target_", "unknown")).split(".")[-1]
-    tags = [cfg.experiment.job_type, model_name]
+    tags = [cfg.model.name, cfg.dataset.name, cfg.loss.name]
     if "wandb" not in cfg:
         cfg.wandb = OmegaConf.create()
     if not cfg.wandb.get("tags"):
         cfg.wandb.tags = tags
     if not cfg.wandb.get("group"):
-        cfg.wandb.group = cfg.project_name
+        cfg.wandb.group = cfg.dataset.name
 
     if not cfg.wandb.get("id"):
         # create id based on log directory for automatic resuming
@@ -272,12 +270,12 @@ def main(cfg: DictConfig):
 
     if not cfg.wandb.get("name"):
         cfg.wandb.name = (
-            f"{cfg.project_name}_{cfg.experiment.job_type}_sd{cfg.seed:03d}_"
+            f"{cfg.dataset.name}_{cfg.model.name}_sd{cfg.seed:03d}_"
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         )
 
     # Create save directory
-    cfg.save_dir = f"{cfg.checkpoint_dir}/{cfg.project_name}/{cfg.experiment.job_type}/"
+    cfg.save_dir = f"{cfg.checkpoint_dir}/{cfg.dataset.name}/{cfg.loss.name}"
     i = 1
     while os.path.exists(cfg.save_dir) and not cfg.get("override", False):
         cfg.save_dir += f"{i}/"
@@ -360,11 +358,9 @@ def main(cfg: DictConfig):
     except Exception as e:
         # Log error
         error_log_path = "logs/error_log.csv"
-        fieldnames = ["timestamp", "job_type", "model", "error"]
+        fieldnames = ["timestamp", "model", "dataset", "loss", "error"]
 
         # Gather info for logging
-        job_type = getattr(cfg.experiment, "job_type", str(cfg.experiment))
-        model_name = getattr(cfg.model, "_target_", str(cfg.model))
         error_str = str(e)
         timestamp = datetime.now().isoformat()
 
@@ -383,8 +379,9 @@ def main(cfg: DictConfig):
                     writer.writeheader()
                 writer.writerow({
                     "timestamp": timestamp,
-                    "job_type": job_type,
-                    "model": model_name,
+                    "model": cfg.model.name,
+                    "dataset": cfg.dataset.name,
+                    "loss": cfg.loss.name,
                     "error": error_str
                 })
         except Exception as log_exc:

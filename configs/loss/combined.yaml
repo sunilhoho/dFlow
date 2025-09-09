@@ -2,6 +2,7 @@
 
 # Combined Loss Configuration (MSE + Dispersive)
 _target_: dflow.training.CombinedLoss
+name: combined
 main_loss:
   _target_: torch.nn.MSELoss
   reduction: mean

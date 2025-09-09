@@ -1,4 +1,0 @@
-# @package hydra.launcher
-
-# Local launcher configuration for dFlow
-_target_: hydra._internal.utils._run_hydra

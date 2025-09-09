@@ -2,6 +2,7 @@
 
 # Multi-scale VICReg Loss Configuration
 _target_: dflow.losses.VICRegMultiScaleLoss
+name: vicreg_multiscale
 lambda_inv: 25.0
 lambda_var: 25.0
 lambda_cov: 1.0

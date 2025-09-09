@@ -2,6 +2,7 @@
 
 # Multi-Component Loss Configuration
 _target_: dflow.losses.MultiComponentLoss
+name: multi_component
 main_loss:
   _target_: torch.nn.MSELoss
   reduction: mean

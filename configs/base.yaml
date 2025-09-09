@@ -5,11 +5,10 @@ defaults:
   - setup
   - model: sit_b_2
   - dataset: cifar10
-  - loss: dispersive_default
-  - training: dispersive_default
-  - scheduler: cosine
-  - sampling: ode_default
+  - loss: mse
   - optimizer: adamw
+  - scheduler: cosine
+  - sampling: ode
   - _self_
 
 # Project settings
@@ -17,12 +16,7 @@ project_name: dflow
 seed: 42
 
 # Paths
-data_root: /path/to/data
 output_dir: ./outputs
 checkpoint_dir: ./checkpoints
 log_dir: ./logs
 
-# Experiment settings
-experiment:
-  name: null
-  job_type: train

@@ -2,6 +2,7 @@
 
 # VICReg + Dispersive Loss Configuration
 _target_: dflow.losses.VICRegDispersiveLoss
+name: vicreg_dispersive
 lambda_vicreg: 1.0
 lambda_disp: 0.25
 vicreg_params:

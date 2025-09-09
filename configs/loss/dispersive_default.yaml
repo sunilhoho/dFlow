@@ -1,6 +1,0 @@
-# @package loss
-
-# Dispersive Loss Configuration
-_target_: dflow.training.DispersiveLoss
-lambda_disp: 0.25
-tau: 1.0

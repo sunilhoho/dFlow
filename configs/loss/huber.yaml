@@ -2,5 +2,6 @@
 
 # Huber Loss Configuration
 _target_: torch.nn.HuberLoss
+name: huber
 reduction: mean
 delta: 1.0

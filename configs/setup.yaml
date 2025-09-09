@@ -1,21 +1,47 @@
-# @package _global_
-
-# Setup configuration for dFlow
+# Wandb
 wandb:
   project: dflow
-  mode: run
+  group: dflow
   resume: allow
+  mode: run
+  name:
+  tags:
+  id:
 
-# Environment
-environment:
-  seed: 42
-  cuda_visible_devices: "0"
+seed: 1
+
+# Setup keops
+keops_build_path: ${oc.env:HOME,logs}/.cache/keops/${oc.env:HOSTNAME,unknown}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+# Wandb resuming
+merge_wandb_resume_cfg: True
+restore_ckpt_from_wandb: True
 
 # Hydra
 hydra:
   run:
-    dir: ${output_dir}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: logs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ${hydra.run.dir}
+    subdir: ${hydra.job.override_dirname}
   job:
-    env_set:
-      CUDA_VISIBLE_DEVICES: ${environment.cuda_visible_devices}
-      WANDB_PROJECT: ${wandb.project}
+    env_set: 
+      WANDB_START_METHOD: thread
+      NUMEXPR_MAX_THREADS: 8
+    config:
+      override_dirname:
+        exclude_keys:
+          - launcher
+          - ckpt_file
+          - wandb.project
+          - wandb.id
+          - agent.actor_hidden_dims
+          - agent.value_hidden_dims
+        kv_sep: .
+        item_sep: "-"
+  # launcher:
+  #   _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.LocalLauncher
+  #   mem_per_cpu: 9000
+  #   gpus_per_node: 1
+  #   tasks_per_node: 4
+  #   timeout_min: 2000
