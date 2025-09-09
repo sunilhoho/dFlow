@@ -30,11 +30,6 @@ from torch.utils.data import DataLoader
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dflow.models import SiT
-from dflow.losses import DispersiveLoss, VICRegLoss
-from dflow.utils import create_dataloader_from_config
-from dflow.sampling import sample_ode, sample_sde
-
 logging.basicConfig(level=logging.INFO)
 
 def setup_environment(config: DictConfig):
@@ -55,18 +50,14 @@ def create_model(config: DictConfig) -> nn.Module:
 
 def create_dataloaders(config: DictConfig) -> DataLoader:
     """Create dataloader from configuration."""
-    dataloader = create_dataloader_from_config(config.dataset)
+    dataloader = hydra.utils.instantiate(config.dataset)
     return dataloader
 
 
 def create_optimizer_and_scheduler(model: nn.Module, config: DictConfig) -> tuple:
     """Create optimizer and learning rate scheduler."""
     # Create optimizer
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=config.training.learning_rate,
-        weight_decay=1e-2
-    )
+    optimizer = hydra.utils.instantiate(config.optimizer, params=model.parameters())
     
     # Create scheduler
     scheduler = hydra.utils.instantiate(config.scheduler, optimizer=optimizer)
@@ -82,11 +73,13 @@ def train_model(model: nn.Module,
     """Train the model."""
     device = next(model.parameters()).device
     
-    # Create loss function
+    # Create loss function from config
     loss_fn = hydra.utils.instantiate(config.loss)
     
-    # Create dispersive loss
-    dispersive_loss = DispersiveLoss(lambda_disp=0.25, tau=1.0)
+    # Create dispersive loss from config if specified
+    dispersive_loss = None
+    if hasattr(config, 'dispersive_loss'):
+        dispersive_loss = hydra.utils.instantiate(config.dispersive_loss)
     
     # Training loop
     model.train()
@@ -117,15 +110,17 @@ def train_model(model: nn.Module,
             # Compute main loss
             main_loss = loss_fn(x_pred, x)
             
-            # Compute dispersive loss
+            # Compute dispersive loss if available
             disp_loss = 0.0
-            if activations is not None:
+            if dispersive_loss is not None and activations is not None:
                 for act in activations:
                     disp_loss += dispersive_loss(act)
                 disp_loss /= len(activations)
             
             # Total loss
-            total_loss = main_loss + 0.25 * disp_loss
+            total_loss = main_loss
+            if dispersive_loss is not None:
+                total_loss += config.training.get('dispersive_weight', 0.25) * disp_loss
             
             # Backward pass
             optimizer.zero_grad()
@@ -204,6 +199,8 @@ def sample_from_model(model: nn.Module, config: DictConfig) -> None:
     
     with torch.no_grad():
         if sampling_config.method == "ode":
+            # Import sampling function dynamically
+            from dflow.sampling import sample_ode
             samples = sample_ode(
                 model=model,
                 shape=(config.dataset.batch_size, 3, 256, 256),
@@ -211,6 +208,8 @@ def sample_from_model(model: nn.Module, config: DictConfig) -> None:
                 device=device
             )
         elif sampling_config.method == "sde":
+            # Import sampling function dynamically
+            from dflow.sampling import sample_sde
             samples = sample_sde(
                 model=model,
                 shape=(config.dataset.batch_size, 3, 256, 256),
@@ -256,7 +255,8 @@ def main(cfg: DictConfig):
     logging.info("output path: %s", cfg.output_dir)
 
     # Setup wandb
-    tags = [cfg.experiment.job_type, cfg.model._target_.split('.')[-1]]
+    model_name = str(cfg.model.get("_target_", "unknown")).split(".")[-1]
+    tags = [cfg.experiment.job_type, model_name]
     if "wandb" not in cfg:
         cfg.wandb = OmegaConf.create()
     if not cfg.wandb.get("tags"):

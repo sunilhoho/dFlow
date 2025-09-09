@@ -3,12 +3,13 @@
 # Base configuration for dFlow
 defaults:
   - setup
-  - model: default
-  - dataset: default
-  - loss: default
-  - training: default
-  - scheduler: default
-  - sampling: default
+  - model: sit_b_2
+  - dataset: cifar10
+  - loss: dispersive_default
+  - training: dispersive_default
+  - scheduler: cosine
+  - sampling: ode_default
+  - optimizer: adamw
   - _self_
 
 # Project settings

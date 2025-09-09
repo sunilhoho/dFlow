@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dflow"
 version = "0.1.0"
-description = "Dispersive Flow - A PyTorch library for diffusion models with dispersive loss"
+description = "Dynamic Flow using Variance-Invariance-Covariance Regularization"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [

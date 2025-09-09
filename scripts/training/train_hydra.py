@@ -12,7 +12,6 @@ import wandb
 from pathlib import Path
 
 from dflow.models import SiT
-from dflow.training import DispersiveLoss, CombinedLoss
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")

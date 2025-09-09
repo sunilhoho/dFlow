@@ -10,11 +10,11 @@ For a simple single-GPU/CPU sampling script, see sample.py.
 """
 import torch
 import torch.distributed as dist
-from models import SiT_models
-from download import find_model
-from transport import create_transport, Sampler
+from dflow.models import SiT_models
+from dflow.download import find_model
+from dflow.transport import create_transport, Sampler
 from diffusers.models import AutoencoderKL
-from train_utils import parse_ode_args, parse_sde_args, parse_transport_args
+from dflow.train_utils import parse_ode_args, parse_sde_args, parse_transport_args
 from tqdm import tqdm
 import os
 from PIL import Image

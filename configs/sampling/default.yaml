@@ -1,8 +1,0 @@
-# @package sampling
-
-# Default sampling configuration
-_target_: dflow.sampling.sample_ode
-method: euler
-num_steps: 50
-rtol: 1e-5
-atol: 1e-5
