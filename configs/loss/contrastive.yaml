@@ -1,0 +1,6 @@
+# @package loss
+
+# Contrastive Loss Configuration
+_target_: dflow.losses.ContrastiveLoss
+temperature: 0.07
+normalize: true

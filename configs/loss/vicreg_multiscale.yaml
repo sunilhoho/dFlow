@@ -1,0 +1,9 @@
+# @package loss
+
+# Multi-scale VICReg Loss Configuration
+_target_: dflow.losses.VICRegMultiScaleLoss
+lambda_inv: 25.0
+lambda_var: 25.0
+lambda_cov: 1.0
+scale_weights: [1.0, 0.8, 0.6, 0.4]  # Weights for different scales
+aggregation: mean

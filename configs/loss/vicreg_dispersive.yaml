@@ -1,0 +1,17 @@
+# @package loss
+
+# VICReg + Dispersive Loss Configuration
+_target_: dflow.losses.VICRegDispersiveLoss
+lambda_vicreg: 1.0
+lambda_disp: 0.25
+vicreg_params:
+  lambda_inv: 25.0
+  lambda_var: 25.0
+  lambda_cov: 1.0
+  sim_coeff: 25.0
+  std_coeff: 25.0
+  cov_coeff: 1.0
+  eps: 1.0e-4
+  aggregation: mean
+disp_tau: 1.0
+aggregation: mean

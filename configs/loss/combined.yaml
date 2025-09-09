@@ -1,0 +1,13 @@
+# @package loss
+
+# Combined Loss Configuration (MSE + Dispersive)
+_target_: dflow.training.CombinedLoss
+main_loss:
+  _target_: torch.nn.MSELoss
+  reduction: mean
+dispersive_loss:
+  _target_: dflow.training.DispersiveLoss
+  lambda_disp: 0.25
+  tau: 1.0
+weight_main: 1.0
+weight_dispersive: 1.0

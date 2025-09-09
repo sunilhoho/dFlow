@@ -1,0 +1,21 @@
+# @package _global_
+
+# Setup configuration for dFlow
+wandb:
+  project: dflow
+  mode: run
+  resume: allow
+
+# Environment
+environment:
+  seed: 42
+  cuda_visible_devices: "0"
+
+# Hydra
+hydra:
+  run:
+    dir: ${output_dir}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job:
+    env_set:
+      CUDA_VISIBLE_DEVICES: ${environment.cuda_visible_devices}
+      WANDB_PROJECT: ${wandb.project}

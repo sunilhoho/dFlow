@@ -1,0 +1,17 @@
+# @package sampling
+
+# DDIM Sampling Configuration
+method: "ddim"
+num_steps: 50
+cfg_scale: 1.5
+num_samples: 4
+image_size: 256
+
+# DDIM parameters
+eta: 0.0  # 0.0 for DDIM, 1.0 for DDPM
+skip_type: "uniform"  # uniform, logSNR
+
+# Output
+save_images: true
+save_npz: false
+output_format: "png"

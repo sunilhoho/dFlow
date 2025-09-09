@@ -1,0 +1,4 @@
+# @package scheduler
+
+_target_: torch.optim.lr_scheduler.ExponentialLR
+gamma: 0.95

@@ -1,0 +1,5 @@
+# @package scheduler
+
+_target_: torch.optim.lr_scheduler.StepLR
+step_size: 100000  # Will be overridden by training config
+gamma: 0.5

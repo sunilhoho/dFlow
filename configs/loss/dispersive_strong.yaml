@@ -1,0 +1,6 @@
+# @package loss
+
+# Strong Dispersive Loss Configuration
+_target_: dflow.training.DispersiveLoss
+lambda_disp: 0.5
+tau: 0.5

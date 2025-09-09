@@ -1,0 +1,24 @@
+# @package loss
+
+# Multi-Component Loss Configuration
+_target_: dflow.losses.MultiComponentLoss
+main_loss:
+  _target_: torch.nn.MSELoss
+  reduction: mean
+dispersive_loss:
+  _target_: dflow.losses.DispersiveLoss
+  lambda_disp: 0.25
+  tau: 1.0
+vicreg_loss:
+  _target_: dflow.losses.VICRegLoss
+  lambda_inv: 25.0
+  lambda_var: 25.0
+  lambda_cov: 1.0
+regularization_loss:
+  _target_: dflow.losses.L2Regularization
+  weight_decay: 1.0e-4
+weights:
+  main: 1.0
+  dispersive: 0.25
+  vicreg: 0.1
+  regularization: 0.01

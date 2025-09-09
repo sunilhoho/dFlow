@@ -1,0 +1,5 @@
+# @package scheduler
+
+_target_: torch.optim.lr_scheduler.CosineAnnealingLR
+T_max: 1000000  # Will be overridden by training config
+eta_min: 1.0e-6

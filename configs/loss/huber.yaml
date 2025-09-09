@@ -1,0 +1,6 @@
+# @package loss
+
+# Huber Loss Configuration
+_target_: torch.nn.HuberLoss
+reduction: mean
+delta: 1.0

@@ -1,0 +1,30 @@
+# @package dataset
+
+# CIFAR-10 Dataset Configuration
+_target_: torchvision.datasets.CIFAR10
+root: /path/to/cifar10
+train: true
+download: true
+transform:
+  _target_: torchvision.transforms.Compose
+  transforms:
+    - _target_: torchvision.transforms.RandomHorizontalFlip
+      p: 0.5
+    - _target_: torchvision.transforms.RandomCrop
+      size: 32
+      padding: 4
+    - _target_: torchvision.transforms.ToTensor
+    - _target_: torchvision.transforms.Normalize
+      mean: [0.4914, 0.4822, 0.4465]
+      std: [0.2023, 0.1994, 0.2010]
+
+# DataLoader configuration
+batch_size: 128
+shuffle: true
+num_workers: 4
+pin_memory: true
+drop_last: true
+
+# Dataset specific settings
+num_classes: 10
+image_size: 32

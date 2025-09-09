@@ -1,0 +1,12 @@
+# @package loss
+
+# VICReg Loss Configuration
+_target_: dflow.losses.VICRegLoss
+lambda_inv: 25.0
+lambda_var: 25.0
+lambda_cov: 1.0
+sim_coeff: 25.0
+std_coeff: 25.0
+cov_coeff: 1.0
+eps: 1.0e-4
+aggregation: mean  # mean, sum, max, min

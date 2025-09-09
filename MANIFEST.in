@@ -1,0 +1,11 @@
+include README.md
+include LICENSE.txt
+include requirements.txt
+include pyproject.toml
+recursive-include dflow *.py
+recursive-include configs *.py
+recursive-include transport *.py
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .git*
+global-exclude .DS_Store

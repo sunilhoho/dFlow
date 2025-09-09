@@ -1,0 +1,5 @@
+# @package loss
+
+# Regularization Loss Configuration
+_target_: dflow.losses.L2Regularization
+weight_decay: 1.0e-4

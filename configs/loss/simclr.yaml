@@ -1,0 +1,6 @@
+# @package loss
+
+# SimCLR Loss Configuration
+_target_: dflow.losses.SimCLRLoss
+temperature: 0.07
+normalize: true

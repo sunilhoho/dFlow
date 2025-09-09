@@ -1,0 +1,6 @@
+# @package loss
+
+# InfoNCE Loss Configuration
+_target_: dflow.losses.InfoNCE
+temperature: 0.07
+normalize: true

@@ -1,0 +1,37 @@
+# @package training
+
+# Training hyperparameters for CIFAR-10
+batch_size: 128
+learning_rate: 2.0e-4
+weight_decay: 1.0e-4
+beta1: 0.9
+beta2: 0.999
+eps: 1.0e-8
+
+# Training schedule
+warmup_steps: 1000
+max_steps: 100000
+num_epochs: 200
+grad_clip_norm: 1.0
+
+# EMA
+ema_decay: 0.9999
+ema_update_freq: 1
+
+# Data
+image_size: 32
+num_classes: 10
+
+# Optimizer
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: ${training.learning_rate}
+  weight_decay: ${training.weight_decay}
+  betas: [${training.beta1}, ${training.beta2}]
+  eps: ${training.eps}
+
+# Default configurations (can be overridden)
+defaults:
+  - override /scheduler: cosine
+  - override /loss: mse
+  - override /dataset: cifar10

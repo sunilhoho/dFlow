@@ -1,0 +1,27 @@
+# @package _global_
+
+# Base configuration for dFlow
+defaults:
+  - setup
+  - model: default
+  - dataset: default
+  - loss: default
+  - training: default
+  - scheduler: default
+  - sampling: default
+  - _self_
+
+# Project settings
+project_name: dflow
+seed: 42
+
+# Paths
+data_root: /path/to/data
+output_dir: ./outputs
+checkpoint_dir: ./checkpoints
+log_dir: ./logs
+
+# Experiment settings
+experiment:
+  name: null
+  job_type: train
