@@ -23,7 +23,7 @@ from dflow.transport import Sampler
 from dflow.utils.trainer_utils import create_logger, center_crop_arr, update_ema, requires_grad, cleanup
 from dflow.utils import wandb_utils
 from hydra.utils import instantiate
-
+from omegaconf import OmegaConf
 import wandb
 #################################################################################
 #                                  Training Loop                                #
@@ -81,6 +81,34 @@ def train_sit_model(cfg: DictConfig):
         os.makedirs(checkpoint_dir, exist_ok=True)
         logger = create_logger(experiment_dir, use_ddp)
         logger.info(f"Experiment directory created at {experiment_dir}")
+        wandb.init(
+            dir=cfg.output_dir,
+            **cfg.wandb,
+        )
+
+        # Resume old wandb run
+        if wandb.run is not None and wandb.run.resumed:
+            logger.info("Resume wandb run %s", wandb.run.path)
+
+        # Log config and overrides
+        logger.info("---------------------------------------------------------------")
+        logger.info("Run config:\n%s", OmegaConf.to_yaml(cfg, resolve=True))
+        logger.info("---------------------------------------------------------------")
+        wandb_config = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
+        # wandb_config["hydra"] = OmegaConf.to_container(cfg.hydra, resolve=True)
+
+        # for k in [
+        #     "help",
+        #     "hydra_help",
+        #     "hydra_logging",
+        #     "job_logging",
+        #     "searchpath",
+        #     "callbacks",
+        #     "sweeper",
+        # ]:
+        #     wandb_config["hydra"].pop(k, None)
+        wandb.config.update(wandb_config, allow_val_change=True)
+
     else:
         logger = create_logger(None, use_ddp)
 

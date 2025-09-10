@@ -88,34 +88,6 @@ def main(cfg: DictConfig):
         i += 1
 
     OmegaConf.set_struct(cfg, True)
-    wandb.init(
-        dir=out_dir,
-        **cfg.wandb,
-    )
-
-    # Resume old wandb run
-    if wandb.run is not None and wandb.run.resumed:
-        logging.info("Resume wandb run %s", wandb.run.path)
-
-    # Log config and overrides
-    logging.info("---------------------------------------------------------------")
-    logging.info("Run config:\n%s", OmegaConf.to_yaml(cfg, resolve=True))
-    logging.info("---------------------------------------------------------------")
-
-    wandb_config = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
-    wandb_config["hydra"] = OmegaConf.to_container(hydra_config, resolve=True)
-
-    for k in [
-        "help",
-        "hydra_help",
-        "hydra_logging",
-        "job_logging",
-        "searchpath",
-        "callbacks",
-        "sweeper",
-    ]:
-        wandb_config["hydra"].pop(k, None)
-    wandb.config.update(wandb_config, allow_val_change=True)
 
     # Run experiment
     logging.info("---------------------------------------------------------------")
