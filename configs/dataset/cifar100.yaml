@@ -1,30 +1,33 @@
 # @package dataset
 
-# CIFAR-100 Dataset Configuration
-_target_: torchvision.datasets.CIFAR100
-root: /storage/dataset/cifar100
-train: true
-download: true
-transform:
-  _target_: torchvision.transforms.Compose
-  transforms:
-    - _target_: torchvision.transforms.RandomHorizontalFlip
-      p: 0.5
-    - _target_: torchvision.transforms.RandomCrop
-      size: 32
-      padding: 4
-    - _target_: torchvision.transforms.ToTensor
-    - _target_: torchvision.transforms.Normalize
-      mean: [0.5071, 0.4867, 0.4408]
-      std: [0.2675, 0.2565, 0.2761]
+dataset:
+  # CIFAR-100 Dataset Configuration
+  _target_: torchvision.datasets.CIFAR100
+  root: /storage/dataset/cifar100
+  train: true
+  download: true
+  # transform:
+  #   _target_: torchvision.transforms.Compose
+  #   transforms:
+  #     - _target_: torchvision.transforms.RandomHorizontalFlip
+  #       p: 0.5
+  #     - _target_: torchvision.transforms.RandomCrop
+  #       size: 32
+  #       padding: 4
+  #     - _target_: torchvision.transforms.ToTensor
+  #     - _target_: torchvision.transforms.Normalize
+  #       mean: [0.5071, 0.4867, 0.4408]
+  #       std: [0.2675, 0.2565, 0.2761]
 
-# DataLoader configuration
-batch_size: 128
-shuffle: true
-num_workers: 4
-pin_memory: true
-drop_last: true
+loader:
+  # DataLoader configuration
+  batch_size: 256
+  shuffle: false
+  num_workers: 4
+  pin_memory: true
+  drop_last: true
 
 # Dataset specific settings
 num_classes: 100
 image_size: 32
+name: cifar100

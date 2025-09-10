@@ -10,6 +10,8 @@ defaults:
   - scheduler: cosine
   - sampling: ode
   - training: standard
+  - transport: linear
+  - vae: mse
   - _self_
 
 # Project settings

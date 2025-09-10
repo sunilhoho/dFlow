@@ -1,4 +1,4 @@
-import torch as th
+import torch
 import numpy as np
 from functools import partial
 
@@ -56,8 +56,8 @@ class ICPlan:
             "SBDM": norm * self.compute_drift(x, t)[1],
             "sigma": norm * self.compute_sigma_t(t)[0],
             "linear": norm * (1 - t),
-            "decreasing": 0.25 * (norm * th.cos(np.pi * t) + 1) ** 2,
-            "inccreasing-decreasing": norm * th.sin(np.pi * t) ** 2,
+            "decreasing": 0.25 * (norm * torch.cos(np.pi * t) + 1) ** 2,
+            "inccreasing-decreasing": norm * torch.sin(np.pi * t) ** 2,
         }
 
         try:
@@ -149,15 +149,15 @@ class VPCPlan(ICPlan):
     def compute_alpha_t(self, t):
         """Compute coefficient of x1"""
         alpha_t = self.log_mean_coeff(t)
-        alpha_t = th.exp(alpha_t)
+        alpha_t = torch.exp(alpha_t)
         d_alpha_t = alpha_t * self.d_log_mean_coeff(t)
         return alpha_t, d_alpha_t
     
     def compute_sigma_t(self, t):
         """Compute coefficient of x0"""
         p_sigma_t = 2 * self.log_mean_coeff(t)
-        sigma_t = th.sqrt(1 - th.exp(p_sigma_t))
-        d_sigma_t = th.exp(p_sigma_t) * (2 * self.d_log_mean_coeff(t)) / (-2 * sigma_t)
+        sigma_t = torch.sqrt(1 - torch.exp(p_sigma_t))
+        d_sigma_t = torch.exp(p_sigma_t) * (2 * self.d_log_mean_coeff(t)) / (-2 * sigma_t)
         return sigma_t, d_sigma_t
     
     def compute_d_alpha_alpha_ratio_t(self, t):
@@ -177,16 +177,16 @@ class GVPCPlan(ICPlan):
     
     def compute_alpha_t(self, t):
         """Compute coefficient of x1"""
-        alpha_t = th.sin(t * np.pi / 2)
-        d_alpha_t = np.pi / 2 * th.cos(t * np.pi / 2)
+        alpha_t = torch.sin(t * np.pi / 2)
+        d_alpha_t = np.pi / 2 * torch.cos(t * np.pi / 2)
         return alpha_t, d_alpha_t
     
     def compute_sigma_t(self, t):
         """Compute coefficient of x0"""
-        sigma_t = th.cos(t * np.pi / 2)
-        d_sigma_t = -np.pi / 2 * th.sin(t * np.pi / 2)
+        sigma_t = torch.cos(t * np.pi / 2)
+        d_sigma_t = -np.pi / 2 * torch.sin(t * np.pi / 2)
         return sigma_t, d_sigma_t
     
     def compute_d_alpha_alpha_ratio_t(self, t):
         """Special purposed function for computing numerical stabled d_alpha_t / alpha_t"""
-        return np.pi / (2 * th.tan(t * np.pi / 2))
+        return np.pi / (2 * torch.tan(t * np.pi / 2))

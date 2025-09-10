@@ -51,10 +51,14 @@ def get_batch(max_step: int, n_batch: int, path_aug: bool, n_traj: int):
     else:
         return n_batch // n_traj
 
+def compute_latent_size(input_size: int):
+    assert input_size % 8 == 0, "Input size must be divisible by 8 (for the VAE encoder)."
+    return input_size // 8
 
 OmegaConf.register_new_resolver("get_free_gpu", get_free_gpu)
 OmegaConf.register_new_resolver("eval", eval)
 OmegaConf.register_new_resolver("get_batch", get_batch)
+OmegaConf.register_new_resolver("compute_latent_size", compute_latent_size)
 
 
 # This fix is only needed for specific clusters

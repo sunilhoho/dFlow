@@ -1,5 +1,4 @@
 # @package transport
-
 _target_: dflow.transport.create_transport
 path_type: Linear
 prediction: velocity

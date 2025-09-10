@@ -1,11 +1,10 @@
-import torch as th
+import torch
 import numpy as np
-import logging
 
 import enum
 
 from . import path
-from .utils import EasyDict, log_state, mean_flat
+from dflow.transport.transport_utils import mean_flat
 from .integrators import ode, sde
 
 class ModelType(enum.Enum):
@@ -37,7 +36,6 @@ class WeightType(enum.Enum):
 
 
 class Transport:
-
     def __init__(
         self,
         *,
@@ -64,20 +62,19 @@ class Transport:
             Standard multivariate normal prior
             Assume z is batched
         '''
-        shape = th.tensor(z.size())
-        N = th.prod(shape[1:])
-        _fn = lambda x: -N / 2. * np.log(2 * np.pi) - th.sum(x ** 2) / 2.
-        return th.vmap(_fn)(z)
-    
+        shape = torch.tensor(z.size())
+        N = torch.prod(shape[1:])
+        _fn = lambda x: -N / 2. * np.log(2 * np.pi) - torch.sum(x ** 2) / 2.
+        return torch.vmap(_fn)(z)
 
     def check_interval(
-        self, 
-        train_eps, 
-        sample_eps, 
-        *, 
+        self,
+        train_eps,
+        sample_eps,
+        *,
         diffusion_form="SBDM",
-        sde=False, 
-        reverse=False, 
+        sde=False,
+        reverse=False,
         eval=False,
         last_step_size=0.0,
     ):
@@ -106,17 +103,17 @@ class Transport:
             x1 - data point; [batch, *dim]
         """
         
-        x0 = th.randn_like(x1)
+        x0 = torch.randn_like(x1)
         t0, t1 = self.check_interval(self.train_eps, self.sample_eps)
-        t = th.rand((x1.shape[0],)) * (t1 - t0) + t0
+        t = torch.rand((x1.shape[0],)) * (t1 - t0) + t0
         t = t.to(x1)
         return t, x0, x1
     
-    def disp_loss(self, z): # Dispersive Loss implementation (InfoNCE-L2 variant)
-        z = z.reshape((z.shape[0],-1)) # flatten
-        diff = th.nn.functional.pdist(z).pow(2)/z.shape[1] # pairwise distance
-        diff = th.concat((diff, diff, th.zeros(z.shape[0]).cuda()))  # match JAX implementation of full BxB matrix
-        return th.log(th.exp(-diff).mean()) # calculate loss
+    # def disp_loss(self, z): # Dispersive Loss implementation (InfoNCE-L2 variant)
+    #     z = z.reshape((z.shape[0],-1)) # flatten
+    #     diff = torch.nn.functional.pdist(z).pow(2)/z.shape[1] # pairwise distance
+    #     diff = torch.concat((diff, diff, torch.zeros(z.shape[0]).cuda()))  # match JAX implementation of full BxB matrix
+    #     return torch.log(torch.exp(-diff).mean()) # calculate loss
     
     def training_losses(
         self, 
@@ -137,10 +134,11 @@ class Transport:
         t, xt, ut = self.path_sampler.plan(t, x0, x1)
         model_output = model(xt, t, **model_kwargs)
 
-        disp_loss = 0
-        if "return_act" in model_kwargs and model_kwargs['return_act']:
-            model_output, act = model_output
-            disp_loss = self.disp_loss(act[-1])
+        # TODO: Make this work with different losses
+        # disp_loss = 0
+        # if "return_act" in model_kwargs and model_kwargs['return_act']:
+        #     model_output, act = model_output
+        #     disp_loss = self.disp_loss(act[-1])
         
         B, *_, C = xt.shape
         assert model_output.size() == (B, *xt.size()[1:-1], C)
@@ -165,7 +163,7 @@ class Transport:
                 terms['loss'] = mean_flat(weight * ((model_output - x0) ** 2))
             else:
                 terms['loss'] = mean_flat(weight * ((model_output * sigma_t + x0) ** 2))
-        terms['loss'] += 0.25*disp_loss 
+        # terms['loss'] += 0.25*disp_loss 
         return terms
     
 
@@ -339,7 +337,7 @@ class Sampler:
 
         def _sample(init, model, **model_kwargs):
             xs = _sde.sample(init, model, **model_kwargs)
-            ts = th.ones(init.size(0), device=init.device) * t1
+            ts = torch.ones(init.size(0), device=init.device) * t1
             x = last_step_fn(xs[-1], ts, model, **model_kwargs)
             xs.append(x)
 
@@ -369,7 +367,7 @@ class Sampler:
         - reverse: whether solving the ODE in reverse (data to noise); default to False
         """
         if reverse:
-            drift = lambda x, t, model, **kwargs: self.drift(x, th.ones_like(t) * (1 - t), model, **kwargs)
+            drift = lambda x, t, model, **kwargs: self.drift(x, torch.ones_like(t) * (1 - t), model, **kwargs)
         else:
             drift = self.drift
 
@@ -414,12 +412,12 @@ class Sampler:
         """
         def _likelihood_drift(x, t, model, **model_kwargs):
             x, _ = x
-            eps = th.randint(2, x.size(), dtype=th.float, device=x.device) * 2 - 1
-            t = th.ones_like(t) * (1 - t)
-            with th.enable_grad():
+            eps = torch.randint(2, x.size(), dtype=torch.float, device=x.device) * 2 - 1
+            t = torch.ones_like(t) * (1 - t)
+            with torch.enable_grad():
                 x.requires_grad = True
-                grad = th.autograd.grad(th.sum(self.drift(x, t, model, **model_kwargs) * eps), x)[0]
-                logp_grad = th.sum(grad * eps, dim=tuple(range(1, len(x.size()))))
+                grad = torch.autograd.grad(torch.sum(self.drift(x, t, model, **model_kwargs) * eps), x)[0]
+                logp_grad = torch.sum(grad * eps, dim=tuple(range(1, len(x.size()))))
                 drift = self.drift(x, t, model, **model_kwargs)
             return (-drift, logp_grad)
         
@@ -443,7 +441,7 @@ class Sampler:
         )
 
         def _sample_fn(x, model, **model_kwargs):
-            init_logp = th.zeros(x.size(0)).to(x)
+            init_logp = torch.zeros(x.size(0)).to(x)
             input = (x, init_logp)
             drift, delta_logp = _ode.sample(input, model, **model_kwargs)
             drift, delta_logp = drift[-1], delta_logp[-1]
