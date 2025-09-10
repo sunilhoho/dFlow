@@ -1,0 +1,8 @@
+# @package transport
+
+_target_: dflow.transport.create_transport
+path_type: GVP
+prediction: velocity
+loss_weight: none
+train_eps: 0
+sample_eps: 0

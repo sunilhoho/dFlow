@@ -253,14 +253,15 @@ def main(cfg: DictConfig):
     if not cfg.get("output_dir"):
         cfg.output_dir = str(out_dir)
     logging.info("output path: %s", cfg.output_dir)
+    cfg.project_name = cfg.dataset._target_.split(".")[-1]
     # Setup wandb
-    tags = [cfg.model.name, cfg.dataset.name, cfg.loss.name]
+    tags = [cfg.model.name, cfg.project_name, cfg.project_name]
     if "wandb" not in cfg:
         cfg.wandb = OmegaConf.create()
     if not cfg.wandb.get("tags"):
         cfg.wandb.tags = tags
     if not cfg.wandb.get("group"):
-        cfg.wandb.group = cfg.dataset.name
+        cfg.wandb.group = cfg.project_name
 
     if not cfg.wandb.get("id"):
         # create id based on log directory for automatic resuming
@@ -270,12 +271,12 @@ def main(cfg: DictConfig):
 
     if not cfg.wandb.get("name"):
         cfg.wandb.name = (
-            f"{cfg.dataset.name}_{cfg.model.name}_sd{cfg.seed:03d}_"
+            f"{cfg.project_name}_{cfg.model.name}_sd{cfg.seed:03d}_"
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         )
 
     # Create save directory
-    cfg.save_dir = f"{cfg.checkpoint_dir}/{cfg.dataset.name}/{cfg.loss.name}"
+    cfg.save_dir = f"{cfg.checkpoint_dir}/{cfg.project_name}/{cfg.project_name}"
     i = 1
     while os.path.exists(cfg.save_dir) and not cfg.get("override", False):
         cfg.save_dir += f"{i}/"
@@ -380,8 +381,8 @@ def main(cfg: DictConfig):
                 writer.writerow({
                     "timestamp": timestamp,
                     "model": cfg.model.name,
-                    "dataset": cfg.dataset.name,
-                    "loss": cfg.loss.name,
+                    "dataset": cfg.project_name,
+                    "loss": cfg.project_name,
                     "error": error_str
                 })
         except Exception as log_exc:

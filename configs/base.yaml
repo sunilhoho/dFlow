@@ -9,6 +9,7 @@ defaults:
   - optimizer: adamw
   - scheduler: cosine
   - sampling: ode
+  - training: standard
   - _self_
 
 # Project settings

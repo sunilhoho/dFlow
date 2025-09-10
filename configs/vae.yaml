@@ -1,0 +1,4 @@
+# @package vae
+
+# VAE configuration
+vae: mse  # stabilityai/sd-vae-ft-mse or stabilityai/sd-vae-ft-ema
