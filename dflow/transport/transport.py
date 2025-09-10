@@ -116,9 +116,9 @@ class Transport:
     #     return torch.log(torch.exp(-diff).mean()) # calculate loss
     
     def training_losses(
-        self, 
-        model,  
-        x1, 
+        self,
+        model,
+        x1,
         model_kwargs=None
     ):
         """Loss for training the score model

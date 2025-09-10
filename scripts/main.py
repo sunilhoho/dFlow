@@ -81,7 +81,7 @@ def main(cfg: DictConfig):
         )
 
     # Create save directory
-    cfg.save_dir = f"{cfg.checkpoint_dir}/{cfg.project_name}/{cfg.project_name}"
+    cfg.save_dir = f"{cfg.checkpoint_dir}/{cfg.dataset.name}_{cfg.model_name}_sd{cfg.seed:03d}/{cfg.wandb.name}"
     i = 1
     while os.path.exists(cfg.save_dir) and not cfg.get("override", False):
         cfg.save_dir += f"{i}/"
@@ -162,8 +162,8 @@ def main(cfg: DictConfig):
                 writer.writerow({
                     "timestamp": timestamp,
                     "model": cfg.model.name,
-                    "dataset": cfg.project_name,
-                    "loss": cfg.project_name,
+                    "dataset": cfg.dataset.name,
+                    "loss": cfg.loss.name,
                     "error": error_str
                 })
         except Exception as log_exc:

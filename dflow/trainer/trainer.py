@@ -13,21 +13,18 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
-import numpy as np
-from PIL import Image
 from copy import deepcopy
 from time import time
 
 import os
-from pathlib import Path
 from omegaconf import DictConfig
 
 from dflow.transport import Sampler
-import wandb
 from dflow.utils.trainer_utils import create_logger, center_crop_arr, update_ema, requires_grad, cleanup
-from dflow.utils.wandb_utils import log_image
+from dflow.utils import wandb_utils
 from hydra.utils import instantiate
 
+import wandb
 #################################################################################
 #                                  Training Loop                                #
 #################################################################################
@@ -40,25 +37,41 @@ def train_sit_model(cfg: DictConfig):
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
     use_ddp = cfg.training.get('use_ddp', False)
 
-    # Setup DDP:
     if use_ddp:
+        # ---- Fail fast & clearer erroring on collectives ----
+        # os.environ.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
+        # os.environ.setdefault("TORCH_NCCL_BLOCKING_WAIT", "1")
+        # os.environ.setdefault("NCCL_DEBUG", "WARN")
+        # Optional, if you have quirky PCIe/IB topology:
+        # os.environ.setdefault("NCCL_P2P_DISABLE", "1")
+
         dist.init_process_group("nccl")
-        assert cfg.dataset.loader.batch_size % dist.get_world_size() == 0, f"Batch size must be divisible by world size."
+
+        # >>> Use environment-provided local rank for device selection <<<
         rank = dist.get_rank()
         device = rank % torch.cuda.device_count()
-        seed = cfg.training.global_seed * dist.get_world_size() + rank
+        world_size = dist.get_world_size()
+
+        # Keep global seed different per rank if desired
+        seed = cfg.training.global_seed * world_size + rank
+
+        # Set device BEFORE any .to(device) / CUDA allocs
+        torch.cuda.set_device(device)
+
+        assert cfg.dataset.loader.batch_size % world_size == 0, \
+            "Batch size must be divisible by world size."
+        local_batch_size = cfg.dataset.loader.batch_size // world_size
+        print(f"Starting rank={rank}, device={device}, world={world_size}, seed={seed}.")
     else:
-        seed = cfg.training.global_seed
         rank = 0
+        world_size = 1
         device = 0
+        seed = cfg.training.global_seed
+        torch.cuda.set_device(device)
+        local_batch_size = cfg.dataset.loader.batch_size
+        print(f"Starting seed={seed}.")
 
     torch.manual_seed(seed)
-    torch.cuda.set_device(device)
-    local_batch_size = int(cfg.dataset.loader.batch_size // dist.get_world_size()) if use_ddp else cfg.dataset.loader.batch_size
-    if use_ddp:
-        print(f"Starting rank={rank}, seed={seed}, world_size={dist.get_world_size()}.")
-    else:
-        print(f"Starting seed={seed}.")
 
     # Setup an experiment folder:
     if rank == 0:
@@ -89,7 +102,10 @@ def train_sit_model(cfg: DictConfig):
 
     # Setup DDP
     if use_ddp:
-        model = DDP(model.to(device), device_ids=[rank])
+        model = DDP(
+            model.to(device),
+            device_ids=[rank],
+        )
     else:
         model = model.to(device)
     # Create transport
@@ -105,14 +121,14 @@ def train_sit_model(cfg: DictConfig):
 
     # Setup data
     transform = transforms.Compose([
-        transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, cfg.model.input_size)),
+        transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, cfg.dataset.image_size)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     ])
     
     # dataset = ImageFolder(cfg.dataset.data_path, transform=transform)
-    dataset = instantiate(cfg.dataset, transform=transform)
+    dataset = instantiate(cfg.dataset.dataset, transform=transform)
 
     if use_ddp:
         sampler = DistributedSampler(
@@ -176,16 +192,18 @@ def train_sit_model(cfg: DictConfig):
 
     for epoch in range(cfg.training.max_epochs):
         if use_ddp:
-            sampler.set_epoch(epoch)
+            loader.sampler.set_epoch(epoch)
         logger.info(f"Beginning epoch {epoch}...")
 
         for x, y in loader:
             x = x.to(device)
             y = y.to(device)
 
-            with torch.no_grad():
-                # Map input images to latent space + normalize latents
-                x = vae.encode(x).latent_dist.sample().mul_(0.18215)
+            # only do this if x' spatial size is 256
+            if cfg.dataset.image_size == 256:
+                with torch.no_grad():
+                    # Map input images to latent space + normalize latents
+                    x = vae.encode(x).latent_dist.sample().mul_(0.18215)
 
             model_kwargs = dict(y=y, return_act=cfg.training.get('disp', False))
             loss_dict = transport.training_losses(model, x, model_kwargs)
@@ -211,17 +229,16 @@ def train_sit_model(cfg: DictConfig):
                 if use_ddp:
                     avg_loss = torch.tensor(running_loss / log_steps, device=device)
                     dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
-                    avg_loss = avg_loss.item() / dist.get_world_size()
+                    avg_loss = avg_loss.item() / world_size
                 else:
                     avg_loss = running_loss / log_steps
 
                 logger.info(f"(step={train_steps:07d}) Train Loss: {avg_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
-
                 if wandb.run is not None:
-                    wandb.log({
+                    wandb_utils.log({
                         "train_loss": avg_loss,
                         "train_steps/sec": steps_per_sec,
-                        "step": train_steps
+                        "train/step": train_steps
                     })
 
                 # Reset monitoring variables
@@ -256,7 +273,8 @@ def train_sit_model(cfg: DictConfig):
 
                 if use_cfg:  # remove null samples
                     samples, _ = samples.chunk(2, dim=0)
-                samples = vae.decode(samples / 0.18215).sample
+                if cfg.dataset.image_size == 256:
+                    samples = vae.decode(samples / 0.18215).sample
 
                 if use_ddp:
                     out_samples = torch.zeros((cfg.dataset.batch_size, 3, cfg.dataset.image_size, cfg.dataset.image_size), device=device)
@@ -265,7 +283,7 @@ def train_sit_model(cfg: DictConfig):
                     out_samples = samples
                 
                 if wandb.run is not None:
-                    log_image(out_samples, train_steps)
+                    wandb_utils.log_image(out_samples, train_steps)
 
                 logger.info("Generating EMA samples done.")
 

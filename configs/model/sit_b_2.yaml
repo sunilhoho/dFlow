@@ -6,10 +6,10 @@ name: sit_b_2
 # SiT-B/2 Configuration
 input_size: ${compute_latent_size:${dataset.image_size}}
 patch_size: 2
-in_channels: 4
+in_channels: ${compute_in_channels:${dataset.image_size}}
 hidden_size: 768
 num_heads: 12
 mlp_ratio: 4.0
 class_dropout_prob: 0.1
-num_classes: 1000
+num_classes: ${dataset.num_classes}
 learn_sigma: true

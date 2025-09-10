@@ -28,6 +28,12 @@ Or install with development dependencies:
 pip install -e ".[dev]"
 ```
 
+### Key:
+
+Make sure you run
+```
+export NCCL_P2P_DISABLE=1
+```
 ### Basic Usage
 
 ```python

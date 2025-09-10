@@ -6,7 +6,7 @@ name: sit_xl_4
 # SiT-XL/4 Configuration
 input_size: ${compute_latent_size:${dataset.image_size}}
 patch_size: 4
-in_channels: 4
+in_channels: ${compute_in_channels:${dataset.image_size}}
 hidden_size: 1152
 depth: 28
 num_heads: 16
