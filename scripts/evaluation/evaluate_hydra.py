@@ -322,9 +322,10 @@ def main(cfg: DictConfig) -> None:
                         fid.update((fake_batch * 255).clamp(0, 255).to(torch.uint8), real=False)
 
                     # Compute (this should not block now)
+                    metrics["num steps"] = int(cfg.sampling.num_steps)
                     metrics["fid"] = float(fid.compute())
                     print(f"[rank 0] FID: {metrics['fid']:.4f}")
-
+                    results_summary[variant_name] = metrics
                 except Exception as e:
                     print(f"[rank 0] ⚠️ Could not compute FID: {e}")
 
@@ -341,15 +342,20 @@ def main(cfg: DictConfig) -> None:
                     inception.update(batch_uint8)
 
                 is_mean, is_std = inception.compute()
+                metrics["num steps"] = int(cfg.sampling.num_steps)
                 metrics["inception_score_mean"] = float(is_mean)
                 metrics["inception_score_std"] = float(is_std)
                 print(f"[rank 0] Inception Score: {is_mean:.4f} ± {is_std:.4f}")
+                results_summary[variant_name] = metrics
 
             except Exception as e:
                 print(f"[rank 0] ⚠️ Could not compute Inception Score: {e}")
 
-
-
+            # Save metrics
+            metrics_path = os.path.join(variant_outdir, "metrics.json")
+            with open(metrics_path, 'w') as f:
+                json.dump(metrics, f, indent=2)
+            print(f"Metrics saved to: {metrics_path}")
 
         # sync before next variant
         if use_ddp:

@@ -18,7 +18,7 @@ def modulate(x, shift, scale):
 
 
 #################################################################################
-#               Embedding Layers for Timesteps and Class Labels                 #
+#           Embedding Layers for Timesteps, Class Labels and Noise              #
 #################################################################################
 
 class TimestepEmbedder(nn.Module):
@@ -90,6 +90,23 @@ class LabelEmbedder(nn.Module):
         embeddings = self.embedding_table(labels)
         return embeddings
 
+class NoiseEmbedder(nn.Module):
+    """
+    Embeds scalar noises into vector representations.
+    """
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(1, hidden_size, bias=True),
+            nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size, bias=True),
+        )
+
+    def forward(self, t):
+        z = (torch.rand(t.shape[0]).to(device=t.device) * torch.cos(math.pi / 2 * t)).unsqueeze(1)
+        z_emb = self.mlp(z)
+        return z_emb
+
 
 #################################################################################
 #                                 Core SiT Model                                #
@@ -155,6 +172,7 @@ class SiT(nn.Module):
         class_dropout_prob=0.1,
         num_classes=1000,
         learn_sigma=True,
+        noise=False,
         **kwargs
     ):
         super().__init__()
@@ -163,10 +181,13 @@ class SiT(nn.Module):
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
         self.patch_size = patch_size
         self.num_heads = num_heads
+        self.noise = noise
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+        if self.noise:
+            self.z_embedder = NoiseEmbedder(hidden_size)
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
@@ -201,6 +222,11 @@ class SiT(nn.Module):
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
+        
+        # Initialize noise embedding MLP:
+        if self.noise:
+            nn.init.normal_(self.z_embedder.mlp[0].weight, std=0.02)
+            nn.init.normal_(self.z_embedder.mlp[2].weight, std=0.02)
 
         # Zero-out adaLN modulation layers in SiT blocks:
         for block in self.blocks:
@@ -234,15 +260,19 @@ class SiT(nn.Module):
         x: (N, C, H, W) tensor of spatial inputs (images or latent representations of images)
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
+        z: (N,) tensor of noise
         """
         act = []
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
+        z = 0
+        if self.noise:
+            z = self.z_embedder(t)               # (N, D)
         t = self.t_embedder(t)                   # (N, D)
         y = self.y_embedder(y, self.training)    # (N, D)
-        c = t + y                                # (N, D)
+        c = t + y + z                            # (N, D) c=t+y
         for block in self.blocks:
-            x = block(x, c)                      # (N, T, D)
-            act.append(x)
+            x = block(x, c)                      # (N, T, D) #TODO x=block(x,c) c= t+y+z_emb
+            act.append(x) #x=CA(x,z)
         x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)                   # (N, out_channels, H, W)
         if self.learn_sigma:

@@ -23,3 +23,5 @@ time: ${now:%m%d%H%M}
 output_dir: ./outputs/${time}
 checkpoint_dir: ./checkpoints/${time}
 log_dir: ./logs
+
+noise: false
