@@ -62,6 +62,10 @@ def compute_in_channels(input_size: int):
         return 4
     else:
         return 3
+def timestamp(fmt: str = "%m%d%H%M") -> str:
+    return datetime.now().strftime(fmt)
+
+OmegaConf.register_new_resolver("now", timestamp)
 OmegaConf.register_new_resolver("get_free_gpu", get_free_gpu)
 OmegaConf.register_new_resolver("eval", eval)
 OmegaConf.register_new_resolver("get_batch", get_batch)

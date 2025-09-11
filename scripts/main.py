@@ -88,7 +88,16 @@ def main(cfg: DictConfig):
         i += 1
 
     OmegaConf.set_struct(cfg, True)
-
+    wandb.init(
+    project=cfg.project_name,
+    dir=out_dir,
+    config=OmegaConf.to_container(cfg, resolve=True),
+    tags=cfg.wandb.tags,
+    group=cfg.wandb.group,
+    name=cfg.wandb.name,
+    id=cfg.wandb.id,
+    resume="allow",   # lets you resume interrupted runs
+    )
     # Run experiment
     logging.info("---------------------------------------------------------------")
 

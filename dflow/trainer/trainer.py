@@ -5,6 +5,7 @@
 A Hydra-compatible training script for SiT using PyTorch DDP.
 """
 import torch
+import pdb
 # the first flag below was False when we tested this script but True makes A100 training a lot faster:
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -198,12 +199,15 @@ def train_sit_model(cfg: DictConfig):
     start_time = time()
 
     # Labels to condition the model with
-    ys = torch.randint(cfg.model.num_classes, size=(local_batch_size,), device=device)
+    ys = torch.randint(cfg.model.num_classes, size=(16,), device=device)
     use_cfg = cfg.get('cfg_scale', 1.0) > 1.0
 
     # Create sampling noise
     n = ys.size(0)
-    zs = torch.randn(n, 4, cfg.model.input_size, cfg.model.input_size, device=device)
+    if cfg.dataset.image_size == 256:
+        zs = torch.randn(n, 4, cfg.model.input_size, cfg.model.input_size, device=device)
+    else:
+        zs = torch.randn(n, 3, cfg.model.input_size, cfg.model.input_size, device=device)
 
     # Setup classifier-free guidance
     if use_cfg:
@@ -305,7 +309,7 @@ def train_sit_model(cfg: DictConfig):
                     samples = vae.decode(samples / 0.18215).sample
 
                 if use_ddp:
-                    out_samples = torch.zeros((cfg.dataset.batch_size, 3, cfg.dataset.image_size, cfg.dataset.image_size), device=device)
+                    out_samples = torch.zeros((64, 3, cfg.dataset.image_size, cfg.dataset.image_size), device=device)
                     dist.all_gather_into_tensor(out_samples, samples)
                 else:
                     out_samples = samples
@@ -314,6 +318,21 @@ def train_sit_model(cfg: DictConfig):
                     wandb_utils.log_image(out_samples, train_steps)
 
                 logger.info("Generating EMA samples done.")
+
+    # Save SiT checkpoint
+    if rank == 0:
+        checkpoint = {
+            "model_state_dict": model.module.state_dict() if use_ddp else model.state_dict(),  # type: ignore
+            "ema_state_dict": ema.state_dict(),
+            "opt_state_dict": opt.state_dict(),
+            "args": cfg
+        }
+        checkpoint_path = f"{checkpoint_dir}/final.pt"
+        torch.save(checkpoint, checkpoint_path)
+        logger.info(f"Saved checkpoint to {checkpoint_path}")
+
+    if use_ddp:
+        dist.barrier()
 
     model.eval()  # important! This disables randomized embedding dropout
     logger.info("Done!")

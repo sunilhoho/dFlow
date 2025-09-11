@@ -3,7 +3,7 @@
 # Base configuration for dFlow
 defaults:
   - setup
-  - model: sit_b_2
+  - model: sit_s_8
   - dataset: cifar10
   - loss: mse
   - optimizer: adamw
@@ -17,9 +17,9 @@ defaults:
 # Project settings
 project_name: dflow
 seed: 42
+time: ${now:%m%d%H%M}
 
-# Paths
-output_dir: ./outputs
-checkpoint_dir: ./checkpoints
+# Paths for training
+output_dir: ./outputs/${time}
+checkpoint_dir: ./checkpoints/${time}
 log_dir: ./logs
-
