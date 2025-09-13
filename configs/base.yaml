@@ -3,7 +3,7 @@
 # Base configuration for dFlow
 defaults:
   - setup
-  - model: sit_s_8
+  - model: sit_b_4
   - dataset: cifar10
   - loss: mse
   - optimizer: adamw
