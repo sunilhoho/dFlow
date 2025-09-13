@@ -132,9 +132,9 @@ def main(cfg: DictConfig) -> None:
         # Choose sampling function once per variant
         with torch.no_grad():
             if cfg.sampling.method == "ode":
-                sample_fn = transport_sampler.sample_ode()
+                sample_fn = transport_sampler.sample_ode(sampling_method=cfg.sampling.solver, num_steps=cfg.sampling.num_steps+1)
             elif cfg.sampling.method == "sde":
-                sample_fn = transport_sampler.sample_sde()
+                sample_fn = transport_sampler.sample_sde(sampling_method=cfg.sampling.solver, num_steps=cfg.sampling.num_steps+1)
             else:
                 raise ValueError(f"Unknown sampling method: {cfg.sampling.method}")
 
@@ -352,7 +352,7 @@ def main(cfg: DictConfig) -> None:
                 print(f"[rank 0] ⚠️ Could not compute Inception Score: {e}")
 
             # Save metrics
-            metrics_path = os.path.join(variant_outdir, "metrics.json")
+            metrics_path = os.path.join(variant_outdir, f"metrics_numsteps{cfg.sampling.num_steps}.json")
             with open(metrics_path, 'w') as f:
                 json.dump(metrics, f, indent=2)
             print(f"Metrics saved to: {metrics_path}")
@@ -360,13 +360,26 @@ def main(cfg: DictConfig) -> None:
         # sync before next variant
         if use_ddp:
             dist.barrier()
+        break
 
     # final summary write by rank 0
     if rank == 0:
         summary_path = Path(cfg.output_dir) / "evaluation" / "summary.json"
         summary_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # load old results if exists
+        if summary_path.exists():
+            with open(summary_path, "r") as f:
+                all_results = json.load(f)
+        else:
+            all_results = {}
+        step_key = f"steps_{cfg.sampling.num_steps}"
+        if step_key not in all_results:
+            all_results[step_key] = {}
+        all_results[step_key].update(results_summary)
+
         with open(summary_path, "w") as f:
-            json.dump(results_summary, f, indent=2)
+            json.dump(all_results, f, indent=2)
         print(f"[rank 0] Summary saved to {summary_path}")
         print("✅ Evaluation completed.")
 

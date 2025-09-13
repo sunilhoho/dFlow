@@ -15,3 +15,5 @@ class_dropout_prob: 0.1
 num_classes: ${dataset.num_classes}
 learn_sigma: true
 noise: ${noise}
+block_wise_noise: ${block_wise_noise}
+avg_vf: 1

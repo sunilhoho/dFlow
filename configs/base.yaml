@@ -25,3 +25,4 @@ checkpoint_dir: ./checkpoints/${time}
 log_dir: ./logs
 
 noise: false
+block_wise_noise: false
