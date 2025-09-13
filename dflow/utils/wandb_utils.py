@@ -16,6 +16,9 @@ from torchvision.utils import make_grid
 import torch
 
 def is_main_process():
+    if not dist.is_available() or not dist.is_initialized():
+        # Single GPU or CPU fallback
+        return True
     return dist.get_rank() == 0
 
 def namespace_to_dict(namespace):

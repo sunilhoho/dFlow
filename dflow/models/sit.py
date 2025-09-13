@@ -94,13 +94,14 @@ class NoiseEmbedder(nn.Module):
     """
     Embeds scalar noises into vector representations.
     """
-    def __init__(self, hidden_size):
+    def __init__(self, hidden_size, avg_vf):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(1, hidden_size, bias=True),
             nn.SiLU(),
             nn.Linear(hidden_size, hidden_size, bias=True),
         )
+        self.avg_vf = avg_vf
 
     def forward(self, t):
         z = (torch.rand(t.shape[0]).to(device=t.device) * torch.cos(math.pi / 2 * t)).unsqueeze(1)
@@ -173,6 +174,8 @@ class SiT(nn.Module):
         num_classes=1000,
         learn_sigma=True,
         noise=False,
+        block_wise_noise=False,
+        avg_vf=1,
         **kwargs
     ):
         super().__init__()
@@ -182,12 +185,14 @@ class SiT(nn.Module):
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.noise = noise
+        self.block_wise_noise = block_wise_noise
+        self.avg_vf = avg_vf
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
         if self.noise:
-            self.z_embedder = NoiseEmbedder(hidden_size)
+            self.z_embedder = NoiseEmbedder(hidden_size, self.avg_vf)
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
@@ -263,23 +268,35 @@ class SiT(nn.Module):
         z: (N,) tensor of noise
         """
         act = []
+        x = x.repeat(self.avg_vf, 1, 1, 1)
+        t = t.repeat(self.avg_vf)
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
-        z = 0
-        if self.noise:
-            z = self.z_embedder(t)               # (N, D)
-        t = self.t_embedder(t)                   # (N, D)
-        y = self.y_embedder(y, self.training)    # (N, D)
-        c = t + y + z                            # (N, D) c=t+y
-        for block in self.blocks:
-            x = block(x, c)                      # (N, T, D) #TODO x=block(x,c) c= t+y+z_emb
-            act.append(x) #x=CA(x,z)
-        x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
+        if self.block_wise_noise:
+            t_emb = self.t_embedder(t)               # (N, D)
+            y = self.y_embedder(y.repeat(self.avg_vf), self.training)    # (N, D)
+            c = t_emb + y                            # (N, D)
+            for block in self.blocks:
+                c = c + self.z_embedder(t)           # (N, D)
+                x = block(x, c)                      # (N, T, D)
+                act.append(x)
+        else:
+            z = 0
+            if self.noise:
+                z = self.z_embedder(t)               # (N, D)
+            t = self.t_embedder(t)                   # (N, D)
+            y = self.y_embedder(y.repeat(self.avg_vf), self.training)    # (N, D)
+            c = t + y + z                            # (N, D)
+            for block in self.blocks:
+                x = block(x, c)                      # (N, T, D)
+                act.append(x)
+        x = self.final_layer(x, c)               # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)                   # (N, out_channels, H, W)
         if self.learn_sigma:
             x, _ = x.chunk(2, dim=1)
         if return_act:
-            return x, act
-        return x
+            return torch.mean(x.view(self.avg_vf, x.shape[0] // self.avg_vf, *x.shape[1:]), dim=0), act
+        return torch.mean(x.view(self.avg_vf, x.shape[0] // self.avg_vf, *x.shape[1:]), dim=0)
+            
 
     def forward_with_cfg(self, x, t, y, cfg_scale):
         """

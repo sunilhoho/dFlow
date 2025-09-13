@@ -61,7 +61,7 @@ def train_sit_model(cfg: DictConfig):
 
         assert cfg.dataset.loader.batch_size % world_size == 0, \
             "Batch size must be divisible by world size."
-        local_batch_size = cfg.dataset.loader.batch_size // world_size
+        local_batch_size = cfg.dataset.loader.batch_size // world_size // cfg.model.avg_vf
         print(f"Starting rank={rank}, device={device}, world={world_size}, seed={seed}.")
     else:
         rank = 0
@@ -69,7 +69,7 @@ def train_sit_model(cfg: DictConfig):
         device = 0
         seed = cfg.training.global_seed
         torch.cuda.set_device(device)
-        local_batch_size = cfg.dataset.loader.batch_size
+        local_batch_size = cfg.dataset.loader.batch_size // cfg.model.avg_vf
         print(f"Starting seed={seed}.")
 
     torch.manual_seed(seed)

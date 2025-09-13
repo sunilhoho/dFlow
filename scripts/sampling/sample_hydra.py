@@ -85,9 +85,9 @@ def main(cfg: DictConfig) -> None:
 
             with torch.no_grad():
                 if cfg.sampling.method == "ode":
-                    sample_fn = transport_sampler.sample_ode()
+                    sample_fn = transport_sampler.sample_ode(sampling_method=cfg.sampling.solver, num_steps=cfg.sampling.num_steps+1)
                 elif cfg.sampling.method == "sde":
-                    sample_fn = transport_sampler.sample_ode()
+                    sample_fn = transport_sampler.sample_sde(sampling_method=cfg.sampling.solver, num_steps=cfg.sampling.num_steps+1)
                 else:
                     raise ValueError(f"Unknown sampling method: {cfg.sampling.method}")
 
