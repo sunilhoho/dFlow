@@ -16,4 +16,6 @@ num_classes: ${dataset.num_classes}
 learn_sigma: true
 noise: ${noise}
 block_wise_noise: ${block_wise_noise}
+block_wise_noisev2: ${block_wise_noisev2}
 avg_vf: 1
+time_scheduler: cos

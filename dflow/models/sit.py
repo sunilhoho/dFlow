@@ -10,7 +10,20 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
+import torch.nn.functional as F
 from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
+
+# def off_diagonal(x):
+#     # x: [N, D, D]
+#     n, d, m = x.shape
+#     assert d == m
+#     mask = ~torch.eye(d, dtype=torch.bool, device=x.device)
+#     return x[:, mask].view(n, d * (d - 1))
+
+def off_diagonal(x):
+    n, m = x.shape
+    assert n == m
+    return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
 
 def modulate(x, shift, scale):
@@ -94,7 +107,7 @@ class NoiseEmbedder(nn.Module):
     """
     Embeds scalar noises into vector representations.
     """
-    def __init__(self, hidden_size, avg_vf):
+    def __init__(self, hidden_size, avg_vf, time_scheduler):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(1, hidden_size, bias=True),
@@ -102,9 +115,13 @@ class NoiseEmbedder(nn.Module):
             nn.Linear(hidden_size, hidden_size, bias=True),
         )
         self.avg_vf = avg_vf
+        self.time_scheduler = time_scheduler
 
     def forward(self, t):
-        z = (torch.rand(t.shape[0]).to(device=t.device) * torch.cos(math.pi / 2 * t)).unsqueeze(1)
+        if self.time_scheduler == 'cos':
+            z = (torch.rand(t.shape[0]).to(device=t.device) * torch.cos(math.pi / 2 * t)).unsqueeze(1)
+        elif self.time_scheduler == 'square':
+            z = (torch.rand(t.shape[0]).to(device=t.device) * (t-1)**2).unsqueeze(1)
         z_emb = self.mlp(z)
         return z_emb
 
@@ -175,7 +192,9 @@ class SiT(nn.Module):
         learn_sigma=True,
         noise=False,
         block_wise_noise=False,
+        block_wise_noisev2=False,
         avg_vf=1,
+        time_scheduler='cos',
         **kwargs
     ):
         super().__init__()
@@ -186,13 +205,14 @@ class SiT(nn.Module):
         self.num_heads = num_heads
         self.noise = noise
         self.block_wise_noise = block_wise_noise
+        self.block_wise_noisev2 = block_wise_noisev2
         self.avg_vf = avg_vf
 
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size, bias=True)
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
         if self.noise:
-            self.z_embedder = NoiseEmbedder(hidden_size, self.avg_vf)
+            self.z_embedder = NoiseEmbedder(hidden_size, self.avg_vf, time_scheduler)
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
@@ -259,7 +279,7 @@ class SiT(nn.Module):
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
         return imgs
 
-    def forward(self, x, t, y, return_act=False):
+    def forward(self, x, t, y, return_act=False, var_loss=0.0, cov_loss=0.0, additional_loss=False):
         """
         Forward pass of SiT.
         x: (N, C, H, W) tensor of spatial inputs (images or latent representations of images)
@@ -269,23 +289,25 @@ class SiT(nn.Module):
         """
         act = []
         x = x.repeat(self.avg_vf, 1, 1, 1)
-        t = t.repeat(self.avg_vf)
+        t_rep = t.repeat(self.avg_vf)
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         if self.block_wise_noise:
-            t_emb = self.t_embedder(t)               # (N, D)
+            t_emb = self.t_embedder(t_rep)               # (N, D)
             y = self.y_embedder(y.repeat(self.avg_vf), self.training)    # (N, D)
-            c = t_emb + y                            # (N, D)
+            c_prev = t_emb + y                            # (N, D)
             for block in self.blocks:
-                c = c + self.z_embedder(t)           # (N, D)
+                c = c_prev+ self.z_embedder(t_rep)           # (N, D)
                 x = block(x, c)                      # (N, T, D)
                 act.append(x)
+            if self.block_wise_noisev2:
+                c = c + self.z_embedder(t_rep)
         else:
             z = 0
             if self.noise:
-                z = self.z_embedder(t)               # (N, D)
-            t = self.t_embedder(t)                   # (N, D)
+                z = self.z_embedder(t_rep)               # (N, D)
+            t_emb = self.t_embedder(t_rep)                   # (N, D)
             y = self.y_embedder(y.repeat(self.avg_vf), self.training)    # (N, D)
-            c = t + y + z                            # (N, D)
+            c = t_emb + y + z                            # (N, D)
             for block in self.blocks:
                 x = block(x, c)                      # (N, T, D)
                 act.append(x)
@@ -295,7 +317,56 @@ class SiT(nn.Module):
             x, _ = x.chunk(2, dim=1)
         if return_act:
             return torch.mean(x.view(self.avg_vf, x.shape[0] // self.avg_vf, *x.shape[1:]), dim=0), act
-        return torch.mean(x.view(self.avg_vf, x.shape[0] // self.avg_vf, *x.shape[1:]), dim=0)
+        if additional_loss:
+            # varinace loss:  - (1-t)^2 * log(var_x)
+            # x_reshape = x.view(self.avg_vf, x.shape[0] // self.avg_vf, *x.shape[1:])    # (B, C, W, H) -> (M, N, C, W, H)
+            # x_var = x_reshape.var(dim=0).clamp(min=1e-6)                                # (M, N, C, W, H) -> (N, C, W, H)
+            # loss_var = torch.mean(-1 * (1-t).view(-1, 1, 1, 1) ** 2 * torch.log(var_x)) # loss = - (1-t)^2 * log(var_x)
+            # return torch.mean(x.view(self.avg_vf, x.shape[0] // self.avg_vf, *x.shape[1:]), dim=0), loss_var
+            
+            # x: shape [M * N, C, H, W] where M = self.avg_vf, N = original batch
+            M = self.avg_vf
+            N = x.shape[0] // M
+            D = x.shape[1] * x.shape[2] * x.shape[3]  # flattened feature dim
+
+            # 1) reshape to [M, N, D]
+            x_reshaped = x.view(M, N, -1)  # [M, N, D]
+
+            # ---------------------
+            # Std / variance loss
+            # ---------------------
+            # std across M (per sample and per feature)
+            std_x = torch.sqrt(x_reshaped.var(dim=0, unbiased=False) + 1e-6)  # [N, D]
+
+            # target std per sample: (1 - t) where t is original batch-length tensor
+            std_target = (1 - t).view(N, 1)                                 # [N, 1]
+            loss_std = torch.mean(F.relu(std_target - std_x))               # scalar
+            # ---------------------
+            # Covariance loss on averaged embeddings
+            # ---------------------
+            # 1) compute averaged embedding per original sample: [N, D]
+            x_avg = x_reshaped.mean(dim=0)          # [N, D]
+
+            # 2) center across batch
+            # x_avg_centered = x_avg - x_avg.mean(dim=0, keepdim=True)  # [N, D]
+
+            # # 3) covariance across the Ntch: [D, D]
+            # cov_x = (x_avg_centered.T @ x_avg_centered) / (N - 1)     # [D, D]
+
+            # # 4) off-diagonal penalty (use existing off_diagonal, which expects square 2D)
+            # loss_cov = off_diagonal(cov_x).pow(2).sum().div(D)
+
+            # ---------------------
+            # Final outputs
+            # ---------------------
+            # return averaged output in original [N, C, H, W] shape plus weighted losses
+            x_out = x_avg.view(N, *x.shape[1:])  # [N, C, H, W]
+
+            # return x_out, var_loss * loss_std, cov_loss * loss_cov
+            return x_out, var_loss * loss_std, 0.0
+        
+        else:
+            return torch.mean(x.view(self.avg_vf, x.shape[0] // self.avg_vf, *x.shape[1:]), dim=0)
             
 
     def forward_with_cfg(self, x, t, y, cfg_scale):

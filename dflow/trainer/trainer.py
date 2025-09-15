@@ -237,7 +237,10 @@ def train_sit_model(cfg: DictConfig):
                     # Map input images to latent space + normalize latents
                     x = vae.encode(x).latent_dist.sample().mul_(0.18215)
 
-            model_kwargs = dict(y=y, return_act=cfg.training.get('disp', False))
+            model_kwargs = dict(y=y, return_act=cfg.training.get('disp', False), 
+                                additional_loss=cfg.training.get('additional_loss', False),
+                                var_loss=cfg.training.get('var_loss', 0.0), 
+                                cov_loss=cfg.training.get('cov_loss', 0.0))
             loss_dict = transport.training_losses(model, x, model_kwargs)
             loss = loss_dict["loss"].mean()
 

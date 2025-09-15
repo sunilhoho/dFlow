@@ -132,7 +132,13 @@ class Transport:
         
         t, x0, x1 = self.sample(x1)
         t, xt, ut = self.path_sampler.plan(t, x0, x1)
-        model_output = model(xt, t, **model_kwargs)
+        
+        loss_var, loss_cov = 0, 0
+        if model_kwargs['additional_loss']:
+            model_output, loss_var, loss_cov = model(xt, t, **model_kwargs)
+        else:
+            model_output = model(xt, t, **model_kwargs)
+            
 
         # TODO: Make this work with different losses
         # disp_loss = 0
@@ -146,7 +152,7 @@ class Transport:
         terms = {}
         terms['pred'] = model_output
         if self.model_type == ModelType.VELOCITY:
-            terms['loss'] = mean_flat(((model_output - ut) ** 2))
+            terms['loss'] = mean_flat(((model_output - ut) ** 2)) + loss_var + loss_cov
         else: 
             _, drift_var = self.path_sampler.compute_drift(xt, t)
             sigma_t, _ = self.path_sampler.compute_sigma_t(path.expand_t_like_x(t, xt))

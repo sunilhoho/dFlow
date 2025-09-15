@@ -1,10 +1,14 @@
-max_epochs: 2000
+max_epochs: 200
 log_every_n_steps: 100
-save_every_n_steps: 20000
-sample_every_n_steps: 20000
+save_every_n_steps: 5000
+sample_every_n_steps: 5000
 gradient_clip_val: 1.0
 max_steps: null  # null means no limit
 use_ddp: true
 
 cfg_scale: 1.0
 global_seed: 0
+
+additional_loss: false
+var_loss: 0.0
+cov_loss: 0.0

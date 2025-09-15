@@ -360,7 +360,6 @@ def main(cfg: DictConfig) -> None:
         # sync before next variant
         if use_ddp:
             dist.barrier()
-        break
 
     # final summary write by rank 0
     if rank == 0:
