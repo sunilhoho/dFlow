@@ -107,23 +107,28 @@ class NoiseEmbedder(nn.Module):
     """
     Embeds scalar noises into vector representations.
     """
-    def __init__(self, hidden_size, avg_vf, time_scheduler):
+    def __init__(self, hidden_size, input_size, patch_size, avg_vf, time_scheduler):
         super().__init__()
+        self.input_size = input_size
+        self.patch_size = patch_size
         self.mlp = nn.Sequential(
-            nn.Linear(1, hidden_size, bias=True),
+            nn.Linear((input_size // patch_size)**2, hidden_size, bias=True),
             nn.SiLU(),
             nn.Linear(hidden_size, hidden_size, bias=True),
         )
         self.avg_vf = avg_vf
         self.time_scheduler = time_scheduler
 
+    def _scale_unit(self, x, scale=1):
+        return (2*scale * x - scale)
+    
     def forward(self, t):
         if self.time_scheduler == 'cos':
-            z = (torch.rand(t.shape[0]).to(device=t.device) * torch.cos(math.pi / 2 * t)).unsqueeze(1)
+            z = self._scale_unit(torch.rand(t.shape[0], (self.input_size // self.patch_size)**2).to(device=t.device)) * torch.cos(math.pi / 2 * t).view(-1, 1)
         elif self.time_scheduler == 'square':
-            z = (torch.rand(t.shape[0]).to(device=t.device) * (t-1)**2).unsqueeze(1)
+            z = self._scale_unit(torch.rand(t.shape[0], (self.input_size // self.patch_size)**2).to(device=t.device)) * ((t-1)**2).view(-1, 1)
         z_emb = self.mlp(z)
-        return z_emb
+        return z_emb.unsqueeze(1)
 
 
 #################################################################################
@@ -212,7 +217,7 @@ class SiT(nn.Module):
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
         if self.noise:
-            self.z_embedder = NoiseEmbedder(hidden_size, self.avg_vf, time_scheduler)
+            self.z_embedder = NoiseEmbedder(hidden_size, input_size, patch_size, self.avg_vf, time_scheduler)
         num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
@@ -288,29 +293,21 @@ class SiT(nn.Module):
         z: (N,) tensor of noise
         """
         act = []
-        x = x.repeat(self.avg_vf, 1, 1, 1)
+        x = x.repeat(self.avg_vf, 1, 1, 1)  # (N * M, C, H, W)
         t_rep = t.repeat(self.avg_vf)
-        x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
-        if self.block_wise_noise:
-            t_emb = self.t_embedder(t_rep)               # (N, D)
-            y = self.y_embedder(y.repeat(self.avg_vf), self.training)    # (N, D)
-            c_prev = t_emb + y                            # (N, D)
-            for block in self.blocks:
-                c = c_prev+ self.z_embedder(t_rep)           # (N, D)
-                x = block(x, c)                      # (N, T, D)
-                act.append(x)
-            if self.block_wise_noisev2:
-                c = c + self.z_embedder(t_rep)
-        else:
-            z = 0
-            if self.noise:
-                z = self.z_embedder(t_rep)               # (N, D)
-            t_emb = self.t_embedder(t_rep)                   # (N, D)
-            y = self.y_embedder(y.repeat(self.avg_vf), self.training)    # (N, D)
-            c = t_emb + y + z                            # (N, D)
-            for block in self.blocks:
-                x = block(x, c)                      # (N, T, D)
-                act.append(x)
+        x = self.x_embedder(x) + self.pos_embed  # (N * M, T, D), where T = H * W / patch_size ** 2
+        if self.noise:
+            x = x + self.z_embedder(t_rep)
+        t_emb = self.t_embedder(t_rep)               # (N * M, D)
+        y = self.y_embedder(y.repeat(self.avg_vf), self.training)    # (N * M, D)
+        c = t_emb + y                            # (N, D)
+        for block in self.blocks:
+            if self.block_wise_noise:
+                x = x + self.z_embedder(t_rep)
+            x = block(x, c)                      # (N, T, D)
+            act.append(x)
+        if self.block_wise_noisev2:
+            x = x + self.z_embedder(t_rep)
         x = self.final_layer(x, c)               # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)                   # (N, out_channels, H, W)
         if self.learn_sigma:
@@ -337,24 +334,25 @@ class SiT(nn.Module):
             # ---------------------
             # std across M (per sample and per feature)
             std_x = torch.sqrt(x_reshaped.var(dim=0, unbiased=False) + 1e-6)  # [N, D]
+            # # Collect mean std per sample for logging
+            # dic_t = {}
+            # for i in range(N):
+            #     dic_t[float(t[i].item())] = float(std_x[i].mean().item())
+
+            # # Append to log file (json format is safer than raw str)
+            # import json
+            # with open('/storage/sunil/exp/dFlow/outputs/0000000/temp.json', 'a') as f:
+            #     f.write(json.dumps(dic_t) + "\n")
 
             # target std per sample: (1 - t) where t is original batch-length tensor
-            std_target = (1 - t).view(N, 1)                                 # [N, 1]
+            std_target = 10 * (1 - t).view(N, 1)                                 # [N, 1]
             loss_std = torch.mean(F.relu(std_target - std_x))               # scalar
-            # ---------------------
-            # Covariance loss on averaged embeddings
-            # ---------------------
-            # 1) compute averaged embedding per original sample: [N, D]
             x_avg = x_reshaped.mean(dim=0)          # [N, D]
 
-            # 2) center across batch
-            # x_avg_centered = x_avg - x_avg.mean(dim=0, keepdim=True)  # [N, D]
-
-            # # 3) covariance across the Ntch: [D, D]
-            # cov_x = (x_avg_centered.T @ x_avg_centered) / (N - 1)     # [D, D]
-
-            # # 4) off-diagonal penalty (use existing off_diagonal, which expects square 2D)
-            # loss_cov = off_diagonal(cov_x).pow(2).sum().div(D)
+            # x_centered = x_reshaped - x_reshaped.mean(dim=1, keepdim=True)                   # [M, N, D]
+            # cov_sample = torch.einsum('mnd,mpd->mnp', x_centered, x_centered) / (D - 1)      # [M, N, N]
+            # mask = ~torch.eye(N, dtype=bool, device=x.device)
+            # loss_cov = cov_sample[:, mask].pow(2).sum().div(N*M)
 
             # ---------------------
             # Final outputs

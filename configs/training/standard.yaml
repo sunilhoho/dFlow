@@ -12,3 +12,4 @@ global_seed: 0
 additional_loss: false
 var_loss: 0.0
 cov_loss: 0.0
+checkpoint: null

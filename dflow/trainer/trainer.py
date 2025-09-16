@@ -124,10 +124,17 @@ def train_sit_model(cfg: DictConfig):
     # Load checkpoint if provided
     if hasattr(cfg.training, 'checkpoint') and cfg.training.checkpoint is not None:
         ckpt_path = cfg.training.checkpoint
-        checkpoint = torch.load(ckpt_path, map_location=device)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        ema.load_state_dict(checkpoint["ema_state_dict"])
-        logger.info(f"Loaded checkpoint from {ckpt_path}")
+        logger.info(f"Loading checkpoint from {ckpt_path}")
+        checkpoint = torch.load(ckpt_path, map_location=f"cuda:{device}")
+        
+        # Use strict=False to ignore mismatched keys
+        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+        
+        # You might also need to do this for the EMA model if its architecture also changed
+        if "ema_state_dict" in checkpoint:
+            ema.load_state_dict(checkpoint["ema_state_dict"], strict=False)
+            
+        logger.info(f"Successfully loaded weights for matching layers from {ckpt_path}")
 
     # Setup DDP
     if use_ddp:
