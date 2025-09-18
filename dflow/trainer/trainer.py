@@ -204,6 +204,9 @@ def train_sit_model(cfg: DictConfig):
     log_steps = 0
     running_loss = 0
     start_time = time()
+    running_invariance_loss = 0
+    running_variance_loss = 0
+    running_covariance_loss = 0
 
     # Labels to condition the model with
     ys = torch.randint(cfg.model.num_classes, size=(16,), device=device)
@@ -258,6 +261,9 @@ def train_sit_model(cfg: DictConfig):
 
             # Log loss values
             running_loss += loss.item()
+            running_invariance_loss = loss_dict["invariance_loss"].mean().item()
+            running_variance_loss = loss_dict["variance_loss"].mean().item()
+            running_covariance_loss = loss_dict["covariance_loss"].mean().item()
             log_steps += 1
             train_steps += 1
 
@@ -270,15 +276,30 @@ def train_sit_model(cfg: DictConfig):
                 # Reduce loss history over all processes
                 if use_ddp:
                     avg_loss = torch.tensor(running_loss / log_steps, device=device)
+                    avg_invariance_loss = torch.tensor(running_invariance_loss / log_steps, device=device)
+                    avg_variance_loss = torch.tensor(running_variance_loss / log_steps, device=device)
+                    avg_covariance_loss = torch.tensor(running_covariance_loss / log_steps, device=device)
                     dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
+                    dist.all_reduce(avg_invariance_loss, op=dist.ReduceOp.SUM)
+                    dist.all_reduce(avg_variance_loss, op=dist.ReduceOp.SUM)
+                    dist.all_reduce(avg_covariance_loss, op=dist.ReduceOp.SUM)
                     avg_loss = avg_loss.item() / world_size
+                    avg_invariance_loss = avg_invariance_loss.item() / world_size
+                    avg_variance_loss = avg_variance_loss.item() / world_size
+                    avg_covariance_loss = avg_covariance_loss.item() / world_size
                 else:
                     avg_loss = running_loss / log_steps
+                    avg_invariance_loss = running_invariance_loss / log_steps
+                    avg_variance_loss = running_variance_loss / log_steps
+                    avg_covariance_loss = running_covariance_loss / log_steps
 
                 logger.info(f"(step={train_steps:07d}) Train Loss: {avg_loss:.4f}, Train Steps/Sec: {steps_per_sec:.2f}")
                 if wandb.run is not None:
                     wandb_utils.log({
                         "train_loss": avg_loss,
+                        "train_invariance_loss": avg_invariance_loss,
+                        "train_variance_loss": avg_variance_loss,
+                        "train_covariance_loss": avg_covariance_loss,
                         "train_steps/sec": steps_per_sec,
                         "train/step": train_steps
                     })

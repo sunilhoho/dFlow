@@ -346,7 +346,7 @@ class SiT(nn.Module):
 
             # target std per sample: (1 - t) where t is original batch-length tensor
             std_target = 10 * (1 - t).view(N, 1)                                 # [N, 1]
-            loss_std = torch.mean(F.relu(std_target - std_x))               # scalar
+            loss_std = F.relu(std_target - std_x)               # scalar
             x_avg = x_reshaped.mean(dim=0)          # [N, D]
 
             # x_centered = x_reshaped - x_reshaped.mean(dim=1, keepdim=True)                   # [M, N, D]
@@ -361,7 +361,7 @@ class SiT(nn.Module):
             x_out = x_avg.view(N, *x.shape[1:])  # [N, C, H, W]
 
             # return x_out, var_loss * loss_std, cov_loss * loss_cov
-            return x_out, var_loss * loss_std, 0.0
+            return x_out, var_loss * loss_std, 0.0 * loss_std
         
         else:
             return torch.mean(x.view(self.avg_vf, x.shape[0] // self.avg_vf, *x.shape[1:]), dim=0)

@@ -152,7 +152,10 @@ class Transport:
         terms = {}
         terms['pred'] = model_output
         if self.model_type == ModelType.VELOCITY:
-            terms['loss'] = mean_flat(((model_output - ut) ** 2)) + loss_var + loss_cov
+            terms['loss'] = mean_flat(((model_output - ut) ** 2)) + mean_flat(loss_var) + mean_flat(loss_cov)
+            terms['invariance_loss'] = mean_flat(((model_output - ut) ** 2))
+            terms['variance_loss'] = mean_flat(loss_var)
+            terms['covariance_loss'] = mean_flat(loss_cov)
         else: 
             _, drift_var = self.path_sampler.compute_drift(xt, t)
             sigma_t, _ = self.path_sampler.compute_sigma_t(path.expand_t_like_x(t, xt))
