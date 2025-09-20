@@ -126,7 +126,7 @@ class NoiseEmbedder(nn.Module):
         if self.time_scheduler == 'cos':
             z = self._scale_unit(torch.rand(t.shape[0], (self.input_size // self.patch_size)**2).to(device=t.device)) * torch.cos(math.pi / 2 * t).view(-1, 1)
         elif self.time_scheduler == 'square':
-            z = self._scale_unit(torch.rand(t.shape[0], (self.input_size // self.patch_size)**2).to(device=t.device)) * ((t-1)**2).view(-1, 1)
+            z = self._scale_unit(torch.rand(t.shape[0], (self.input_size // self.patch_size)**2).to(device=t.device)) * ((1-t)**2).view(-1, 1)
         z_emb = self.mlp(z)
         return z_emb.unsqueeze(1)
 
@@ -334,25 +334,26 @@ class SiT(nn.Module):
             # ---------------------
             # std across M (per sample and per feature)
             std_x = torch.sqrt(x_reshaped.var(dim=0, unbiased=False) + 1e-6)  # [N, D]
+
             # # Collect mean std per sample for logging
-            # dic_t = {}
+            # dic_var = {}
             # for i in range(N):
-            #     dic_t[float(t[i].item())] = float(std_x[i].mean().item())
+            #     dic_var[float(t[i].item())] = float(std_x[i].mean().item())
 
             # # Append to log file (json format is safer than raw str)
             # import json
-            # with open('/storage/sunil/exp/dFlow/outputs/0000000/temp.json', 'a') as f:
-            #     f.write(json.dumps(dic_t) + "\n")
-
+            # with open('/home/sunil/exp/dFlow/outputs/temp/10.json', 'a') as f:
+            #     f.write(json.dumps(dic_var) + "\n")
+            
             # target std per sample: (1 - t) where t is original batch-length tensor
-            std_target = 10 * (1 - t).view(N, 1)                                 # [N, 1]
+            std_target = 5 * (1 - t).view(N, 1)                                 # [N, 1]
             loss_std = F.relu(std_target - std_x)               # scalar
             x_avg = x_reshaped.mean(dim=0)          # [N, D]
 
-            # x_centered = x_reshaped - x_reshaped.mean(dim=1, keepdim=True)                   # [M, N, D]
-            # cov_sample = torch.einsum('mnd,mpd->mnp', x_centered, x_centered) / (D - 1)      # [M, N, N]
-            # mask = ~torch.eye(N, dtype=bool, device=x.device)
-            # loss_cov = cov_sample[:, mask].pow(2).sum().div(N*M)
+            x_centered = x_reshaped - x_reshaped.mean(dim=1, keepdim=True)                   # [M, N, D]
+            cov_sample = torch.einsum('mnd,mpd->mnp', x_centered, x_centered) / (D - 1)      # [M, N, N]
+            mask = ~torch.eye(N, dtype=bool, device=x.device)
+            loss_cov = cov_sample[:, mask].pow(2).sum().div(N*M)
 
             # ---------------------
             # Final outputs
@@ -361,7 +362,7 @@ class SiT(nn.Module):
             x_out = x_avg.view(N, *x.shape[1:])  # [N, C, H, W]
 
             # return x_out, var_loss * loss_std, cov_loss * loss_cov
-            return x_out, var_loss * loss_std, 0.0 * loss_std
+            return x_out, var_loss * loss_std, cov_loss * loss_cov
         
         else:
             return torch.mean(x.view(self.avg_vf, x.shape[0] // self.avg_vf, *x.shape[1:]), dim=0)

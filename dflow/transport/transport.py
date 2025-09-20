@@ -80,6 +80,7 @@ class Transport:
     ):
         t0 = 0
         t1 = 1
+        import pdb; pdb.set_trace()
         eps = train_eps if not eval else sample_eps
         if (type(self.path_sampler) in [path.VPCPlan]):
 
@@ -104,8 +105,11 @@ class Transport:
         """
         
         x0 = torch.randn_like(x1)
-        t0, t1 = self.check_interval(self.train_eps, self.sample_eps)
-        t = torch.rand((x1.shape[0],)) * (t1 - t0) + t0
+        # t0, t1 = self.check_interval(self.train_eps, self.sample_eps)
+        # t = torch.rand((x1.shape[0],)) * (t1 - t0) + t0
+        normal_samples = torch.randn((x1.shape[0],))
+        normal_samples = normal_samples * 1.0 - 0.4
+        t = torch.sigmoid(normal_samples)
         t = t.to(x1)
         return t, x0, x1
     

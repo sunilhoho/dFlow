@@ -14,6 +14,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
+from torchvision.datasets import ImageFolder
 from copy import deepcopy
 from time import time
 
@@ -154,17 +155,20 @@ def train_sit_model(cfg: DictConfig):
 
     # Setup optimizer
     opt = instantiate(cfg.optimizer, params=model.parameters())
-
-    # Setup data
+    
+    # Setup data:
     transform = transforms.Compose([
         transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, cfg.dataset.image_size)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     ])
+
+    if cfg.dataset.name == 'cifar10':
+        dataset = instantiate(cfg.dataset.dataset, transform=transform)
     
-    # dataset = ImageFolder(cfg.dataset.data_path, transform=transform)
-    dataset = instantiate(cfg.dataset.dataset, transform=transform)
+    elif cfg.dataset.name == 'imagenet':
+        dataset = ImageFolder(cfg.dataset.data_path, transform=transform)
 
     if use_ddp:
         sampler = DistributedSampler(
@@ -261,9 +265,9 @@ def train_sit_model(cfg: DictConfig):
 
             # Log loss values
             running_loss += loss.item()
-            running_invariance_loss = loss_dict["invariance_loss"].mean().item()
-            running_variance_loss = loss_dict["variance_loss"].mean().item()
-            running_covariance_loss = loss_dict["covariance_loss"].mean().item()
+            running_invariance_loss += loss_dict["invariance_loss"].mean().item()
+            running_variance_loss += loss_dict["variance_loss"].mean().item()
+            running_covariance_loss += loss_dict["covariance_loss"].mean().item()
             log_steps += 1
             train_steps += 1
 
@@ -306,6 +310,9 @@ def train_sit_model(cfg: DictConfig):
 
                 # Reset monitoring variables
                 running_loss = 0
+                running_invariance_loss = 0
+                running_variance_loss = 0
+                running_covariance_loss = 0
                 log_steps = 0
                 start_time = time()
 
@@ -328,7 +335,7 @@ def train_sit_model(cfg: DictConfig):
             # Generate samples
             if train_steps % cfg.training.sample_every_n_steps == 0 and train_steps > 0:
                 logger.info("Generating EMA samples...")
-                sample_fn = transport_sampler.sample_ode()  # default to ode sampling
+                sample_fn = transport_sampler.sample_ode(sampling_method=cfg.sampling.solver, num_steps=8+1)  # NFE=2^3
                 samples = sample_fn(zs, model_fn, **sample_model_kwargs)[-1]
 
                 if use_ddp:

@@ -10,6 +10,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from PIL import Image
 import os
+from diffusers.models import AutoencoderKL
 
 from dflow.models import SiT
 from dflow.transport import Sampler
@@ -29,6 +30,8 @@ def main(cfg: DictConfig) -> None:
         torch.cuda.manual_seed(cfg.seed)
     transport = hydra.utils.instantiate(cfg.transport)
     transport_sampler = Sampler(transport)
+    if cfg.dataset.image_size == 256:
+        vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{cfg.vae}").to(device)
     # Setup device
     device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -92,20 +95,30 @@ def main(cfg: DictConfig) -> None:
                     raise ValueError(f"Unknown sampling method: {cfg.sampling.method}")
 
                 samples = sample_fn(zs, model_fn, **sample_model_kwargs)[-1]
+            
+            if cfg.dataset.image_size == 256:
+                samples = vae.decode(samples / 0.18215).sample
+                samples = torch.clamp(127.5 * samples + 128.0, 0, 255).permute(0, 2, 3, 1).to("cpu", dtype=torch.uint8).numpy()
 
-            # Convert to numpy
-            samples = samples.cpu().numpy()
-            samples = (samples + 1) / 2
-            samples = np.clip(samples, 0, 1)
+                # Save individual images
+                for i, sample in enumerate(samples):
+                    img_array = (sample.transpose(1, 2, 0) * 255).astype(np.uint8)
+                    img = Image.fromarray(img_array)
+                    img_path = os.path.join(variant_outdir, f"sample_{i:04d}.{cfg.sampling.output_format}")
+                    Image.fromarray(sample).save(img_path)
+            else:
+                # Convert to numpy
+                samples = samples.cpu().numpy()
+                samples = (samples + 1) / 2
+                samples = np.clip(samples, 0, 1)
 
-            # Save individual images
-            if cfg.sampling.save_images:
+                # Save individual images
                 for i, sample in enumerate(samples):
                     img_array = (sample.transpose(1, 2, 0) * 255).astype(np.uint8)
                     img = Image.fromarray(img_array)
                     img_path = os.path.join(variant_outdir, f"sample_{i:04d}.{cfg.sampling.output_format}")
                     img.save(img_path)
-                print(f"Saved {len(samples)} images to {variant_outdir}")
+            print(f"Saved {len(samples)} images to {variant_outdir}")
 
             # Save npz
             if cfg.sampling.save_npz:

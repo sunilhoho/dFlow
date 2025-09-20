@@ -3,7 +3,7 @@
 dataset:
   # ImageNet Dataset Configuration
   _target_: torchvision.datasets.ImageNet
-  root: /storage/dataset/imagenet
+  root: /storage/sunil/imagenet
   split: train
   # transform:
   #   _target_: torchvision.transforms.Compose
@@ -20,7 +20,7 @@ dataset:
 loader:
   # DataLoader configuration
   batch_size: 256
-  shuffle: false
+  shuffle: true
   num_workers: 4
   pin_memory: true
   drop_last: true

@@ -11,7 +11,7 @@ defaults:
   - sampling: ode
   - training: standard
   - transport: linear
-  - vae: mse
+  - vae: ema
   - _self_
 
 # Project settings

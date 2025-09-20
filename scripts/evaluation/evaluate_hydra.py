@@ -22,6 +22,7 @@ from tqdm import tqdm
 from torchmetrics.image.fid import FrechetInceptionDistance
 from torchmetrics.image.inception import InceptionScore
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+from diffusers.models import AutoencoderKL
 
 from dflow.transport import Sampler
 from dflow.utils import hydra as hydra_utils
@@ -68,10 +69,23 @@ def main(cfg: DictConfig) -> None:
     checkpoint = torch.load(ckpt_path, map_location=device)
     if rank == 0:
         print(f"[rank 0] Loaded checkpoint from {ckpt_path}")
+        if isinstance(checkpoint, dict):
+            print(f"[rank 0] checkpoint keys: {list(checkpoint.keys())[:10]}")
+
+    def extract_state_dict(checkpoint, key_candidates):
+        """Extract a state dict from checkpoint (handles dict or raw state_dict)."""
+        if isinstance(checkpoint, dict):
+            for key in key_candidates:
+                if key in checkpoint:
+                    return checkpoint[key]
+        # If checkpoint itself looks like a state_dict
+        if all(isinstance(k, str) for k in checkpoint.keys()):
+            return checkpoint
+        return None
 
     model_variants = {
-        "naive": checkpoint.get("model_state_dict", checkpoint.get("model", None)),
-        "ema": checkpoint.get("ema_state_dict", checkpoint.get("ema", None)),
+        "naive": extract_state_dict(checkpoint, ["model_state_dict", "model"]),
+        "ema": extract_state_dict(checkpoint, ["ema_state_dict", "ema"]),
     }
 
     num_eval_samples = int(cfg.get("evaluation", {}).get("num_eval_samples", 50000))
@@ -100,23 +114,42 @@ def main(cfg: DictConfig) -> None:
 
         # instantiate model and load weights (per-rank)
         model = hydra.utils.instantiate(cfg.model).to(device)
-        # If state dict saved from DDP, keys might be "module.*"
+
+        # Try to load normally
         try:
-            model.load_state_dict(state_dict)
+            missing, unexpected = model.load_state_dict(state_dict, strict=False)
         except RuntimeError:
-            # try stripping "module."
+            # Retry after stripping "module." prefix
             new_state = {}
             for k, v in state_dict.items():
                 if k.startswith("module."):
                     new_state[k[len("module.") :]] = v
                 else:
                     new_state[k] = v
-            model.load_state_dict(new_state)
+            missing, unexpected = model.load_state_dict(new_state, strict=False)
+
+        if rank == 0:
+            total_params = sum(p.numel() for p in model.state_dict().values())
+            loaded_params = total_params - sum(
+                model.state_dict()[k].numel() for k in missing if k in model.state_dict()
+            )
+            print(f"[rank 0] Weight loading summary for {variant_name}:")
+            print(f"  Total params:      {total_params}")
+            print(f"  Loaded params:     {loaded_params}")
+            print(f"  Missing keys:      {len(missing)}")
+            if missing:
+                print(f"    {missing}")
+            print(f"  Unexpected keys:   {len(unexpected)}")
+            if unexpected:
+                print(f"    {unexpected}")
+
         model.eval()
+
 
         transport = hydra.utils.instantiate(cfg.transport)
         transport_sampler = Sampler(transport)
-
+        if cfg.dataset.image_size == 256:
+            vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-ema").to(device)
         # per-variant outdir (only by rank 0)
         variant_outdir = Path(cfg.output_dir) / "evaluation" / variant_name
         if rank == 0:
@@ -158,8 +191,11 @@ def main(cfg: DictConfig) -> None:
                     batch, _ = batch.chunk(2, dim=0)
                 else:
                     batch = sample_fn(zs, model.forward, y=ys)[-1]
-
-                batch = torch.clamp((batch + 1) / 2, 0.0, 1.0)
+                if cfg.dataset.image_size == 256:
+                    samples = vae.decode(samples / 0.18215).sample
+                    samples = torch.clamp(127.5 * samples + 128.0, 0, 255).permute(0, 2, 3, 1)
+                else:
+                    batch = torch.clamp((batch + 1) / 2, 0.0, 1.0)
                 local_chunks.append(batch)
                 produced += cur
                 pbar.update(cur)
