@@ -44,6 +44,8 @@ class Transport:
         loss_type,
         train_eps,
         sample_eps,
+        time_mu,
+        time_sigma,
     ):
         path_options = {
             PathType.LINEAR: path.ICPlan,
@@ -56,6 +58,8 @@ class Transport:
         self.path_sampler = path_options[path_type]()
         self.train_eps = train_eps
         self.sample_eps = sample_eps
+        self.time_mu = time_mu
+        self.time_sigma = time_sigma
 
     def prior_logp(self, z):
         '''
@@ -80,7 +84,6 @@ class Transport:
     ):
         t0 = 0
         t1 = 1
-        import pdb; pdb.set_trace()
         eps = train_eps if not eval else sample_eps
         if (type(self.path_sampler) in [path.VPCPlan]):
 
@@ -105,11 +108,13 @@ class Transport:
         """
         
         x0 = torch.randn_like(x1)
-        # t0, t1 = self.check_interval(self.train_eps, self.sample_eps)
-        # t = torch.rand((x1.shape[0],)) * (t1 - t0) + t0
-        normal_samples = torch.randn((x1.shape[0],))
-        normal_samples = normal_samples * 1.0 - 0.4
-        t = torch.sigmoid(normal_samples)
+        if self.time_sigma < 0:
+            t0, t1 = self.check_interval(self.train_eps, self.sample_eps)
+            t = torch.rand((x1.shape[0],)) * (t1 - t0) + t0
+        else:
+            normal_samples = torch.randn((x1.shape[0],))
+            normal_samples = normal_samples * self.time_sigma + self.time_mu
+            t = torch.sigmoid(normal_samples)
         t = t.to(x1)
         return t, x0, x1
     
@@ -123,6 +128,7 @@ class Transport:
         self,
         model,
         x1,
+        invar_loss,
         model_kwargs=None
     ):
         """Loss for training the score model
@@ -156,8 +162,8 @@ class Transport:
         terms = {}
         terms['pred'] = model_output
         if self.model_type == ModelType.VELOCITY:
-            terms['loss'] = mean_flat(((model_output - ut) ** 2)) + mean_flat(loss_var) + mean_flat(loss_cov)
-            terms['invariance_loss'] = mean_flat(((model_output - ut) ** 2))
+            terms['loss'] = invar_loss * mean_flat(((model_output - ut) ** 2)) + mean_flat(loss_var) + mean_flat(loss_cov)
+            terms['invariance_loss'] = invar_loss * mean_flat(((model_output - ut) ** 2))
             terms['variance_loss'] = mean_flat(loss_var)
             terms['covariance_loss'] = mean_flat(loss_cov)
         else: 

@@ -365,27 +365,27 @@ def main(cfg: DictConfig) -> None:
                 except Exception as e:
                     print(f"[rank 0] ⚠️ Could not compute FID: {e}")
 
-            # ---------- Inception Score ----------
-            try:
-                inception, inc_device = make_metric_safe(InceptionScore)
-                bs = min(int(cfg.dataset.loader.batch_size), 32)
+            # # ---------- Inception Score ----------
+            # try:
+            #     inception, inc_device = make_metric_safe(InceptionScore)
+            #     bs = min(int(cfg.dataset.loader.batch_size), 32)
 
-                samples_dev = samples.to(inc_device)
+            #     samples_dev = samples.to(inc_device)
 
-                for i in tqdm(range(0, len(samples_dev), bs), desc="[rank 0] Inception"):
-                    batch = samples_dev[i:i+bs]
-                    batch_uint8 = (batch * 255).clamp(0,255).to(torch.uint8)
-                    inception.update(batch_uint8)
+            #     for i in tqdm(range(0, len(samples_dev), bs), desc="[rank 0] Inception"):
+            #         batch = samples_dev[i:i+bs]
+            #         batch_uint8 = (batch * 255).clamp(0,255).to(torch.uint8)
+            #         inception.update(batch_uint8)
 
-                is_mean, is_std = inception.compute()
-                metrics["num steps"] = int(cfg.sampling.num_steps)
-                metrics["inception_score_mean"] = float(is_mean)
-                metrics["inception_score_std"] = float(is_std)
-                print(f"[rank 0] Inception Score: {is_mean:.4f} ± {is_std:.4f}")
-                results_summary[variant_name] = metrics
+            #     is_mean, is_std = inception.compute()
+            #     metrics["num steps"] = int(cfg.sampling.num_steps)
+            #     metrics["inception_score_mean"] = float(is_mean)
+            #     metrics["inception_score_std"] = float(is_std)
+            #     print(f"[rank 0] Inception Score: {is_mean:.4f} ± {is_std:.4f}")
+            #     results_summary[variant_name] = metrics
 
-            except Exception as e:
-                print(f"[rank 0] ⚠️ Could not compute Inception Score: {e}")
+            # except Exception as e:
+            #     print(f"[rank 0] ⚠️ Could not compute Inception Score: {e}")
 
             # Save metrics
             metrics_path = os.path.join(variant_outdir, f"metrics_numsteps{cfg.sampling.num_steps}.json")

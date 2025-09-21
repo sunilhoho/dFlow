@@ -255,7 +255,7 @@ def train_sit_model(cfg: DictConfig):
                                 additional_loss=cfg.training.get('additional_loss', False),
                                 var_loss=cfg.training.get('var_loss', 0.0), 
                                 cov_loss=cfg.training.get('cov_loss', 0.0))
-            loss_dict = transport.training_losses(model, x, model_kwargs)
+            loss_dict = transport.training_losses(model, x, cfg.training.get('invar_loss', 1.0), model_kwargs)
             loss = loss_dict["loss"].mean()
 
             opt.zero_grad()
