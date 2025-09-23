@@ -10,7 +10,7 @@ cfg_scale: 1.0
 global_seed: 0
 
 additional_loss: false
-invar_loss: 0.0
+invar_loss: 1.0
 var_loss: 0.0
 cov_loss: 0.0
 checkpoint: null

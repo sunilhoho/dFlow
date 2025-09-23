@@ -161,11 +161,15 @@ class Transport:
 
         terms = {}
         terms['pred'] = model_output
+        # import pdb; pdb.set_trace()
         if self.model_type == ModelType.VELOCITY:
-            terms['loss'] = invar_loss * mean_flat(((model_output - ut) ** 2)) + mean_flat(loss_var) + mean_flat(loss_cov)
-            terms['invariance_loss'] = invar_loss * mean_flat(((model_output - ut) ** 2))
-            terms['variance_loss'] = mean_flat(loss_var)
-            terms['covariance_loss'] = mean_flat(loss_cov)
+            if invar_loss < 0:
+                invar_per_sample = ((model_output - ut) ** 2).mean(dim=-1)  # [N] not implemente well..
+                invar_loss = (1.0 / (invar_per_sample.detach() + 1e-3).pow(0.75)).detach()  # [N]
+            terms['loss'] = invar_loss * mean_flat(((model_output - ut) ** 2)).mean() + mean_flat(loss_var).mean() + loss_cov
+            terms['invariance_loss'] = invar_loss * mean_flat(((model_output - ut) ** 2)).mean()
+            terms['variance_loss'] = loss_var.mean()
+            terms['covariance_loss'] = loss_cov
         else: 
             _, drift_var = self.path_sampler.compute_drift(xt, t)
             sigma_t, _ = self.path_sampler.compute_sigma_t(path.expand_t_like_x(t, xt))

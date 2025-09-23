@@ -256,7 +256,7 @@ def train_sit_model(cfg: DictConfig):
                                 var_loss=cfg.training.get('var_loss', 0.0), 
                                 cov_loss=cfg.training.get('cov_loss', 0.0))
             loss_dict = transport.training_losses(model, x, cfg.training.get('invar_loss', 1.0), model_kwargs)
-            loss = loss_dict["loss"].mean()
+            loss = loss_dict["loss"]
 
             opt.zero_grad()
             loss.backward()
@@ -265,9 +265,9 @@ def train_sit_model(cfg: DictConfig):
 
             # Log loss values
             running_loss += loss.item()
-            running_invariance_loss += loss_dict["invariance_loss"].mean().item()
-            running_variance_loss += loss_dict["variance_loss"].mean().item()
-            running_covariance_loss += loss_dict["covariance_loss"].mean().item()
+            running_invariance_loss += loss_dict["invariance_loss"].item()
+            running_variance_loss += loss_dict["variance_loss"].item()
+            running_covariance_loss += loss_dict["covariance_loss"].item()
             log_steps += 1
             train_steps += 1
 

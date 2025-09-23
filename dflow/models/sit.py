@@ -350,11 +350,35 @@ class SiT(nn.Module):
             loss_std = F.relu(std_target - std_x)               # scalar
             x_avg = x_reshaped.mean(dim=0)          # [N, D]
 
-            x_centered = x_reshaped - x_reshaped.mean(dim=1, keepdim=True)                   # [M, N, D]
-            cov_sample = torch.einsum('mnd,mpd->mnp', x_centered, x_centered) / (D - 1)      # [M, N, N]
-            mask = ~torch.eye(N, dtype=bool, device=x.device)
-            loss_cov = cov_sample[:, mask].pow(2).sum().div(N*M)
+            # x_centered = x_reshaped - x_reshaped.mean(dim=1, keepdim=True)                   # [M, N, D]
+            # cov_sample = torch.einsum('mnd,mpd->mnp', x_centered, x_centered) / (D - 1)      # [M, N, N]
+            # mask = ~torch.eye(N, dtype=bool, device=x.device)
+            # loss_cov = cov_sample[:, mask].pow(2).sum().div(N*M)
 
+            # # covariance for noise & samples
+            # Xc = x_reshaped - x_reshaped.mean(dim=2, keepdim=True)                # (M, N, D)
+            # cov_m = torch.matmul(Xc, Xc.transpose(1, 2)) / (D - 1)                # (M, N, N)
+            # off = cov_m - torch.diag_embed(torch.diagonal(cov_m, dim1=1, dim2=2)) # zero the diagonal
+            # loss_cov = (off**2).mean()                                            # average over M and all pairs
+
+            # covariance for average vector field
+            Xc = x_avg - x_avg.mean(dim=1, keepdim=True)  # [N, D] center over features D
+            Cov = (Xc @ Xc.T) / (D - 1)                   # [N, N]  covariance across N using D samples
+            off = Cov - torch.diag_embed(torch.diag(Cov)) # zero diagonal
+            loss_cov = (off ** 2).mean()                  # scalar
+            
+            # return x_out, var_loss * loss_std, cov_loss * loss_cov
+            if cov_loss < 0:
+                w_cov = (1.0 / (loss_cov.detach() + 1e-3).pow(0.75)).detach()             
+                loss_cov = w_cov * loss_cov
+                     
+                var_per_sample = (loss_std ** 2).mean(dim=-1)  # average over D
+                var_loss_term = var_per_sample.mean()         # default reduction
+                norm2_var = (loss_std.detach() ** 2).mean(dim=-1)
+                w_var = (1.0 / (norm2_var + 1e-3).pow(0.75)).detach()
+                var_loss_term = (w_var * var_per_sample).mean()
+                return x_out, var_loss_term, loss_cov
+                
             # ---------------------
             # Final outputs
             # ---------------------
